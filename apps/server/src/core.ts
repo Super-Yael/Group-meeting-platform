@@ -5,6 +5,15 @@ import path from 'node:path';
 
 export type User = {id:string; name:string; role:'admin'|'member'|'pi'; team_group:string};
 export function assertContentWrite(role:string){if(role==='pi')throw Object.assign(new Error('PI 账号为只读，不能修改团队内容'),{status:403});}
+export function recordPermissions(db:Database.Database,actor:{id:string;role:string},date:string){
+  const duty=db.prepare('SELECT duty_type FROM schedules WHERE date=? AND user_id=?').get(date,actor.id) as {duty_type:string}|undefined;
+  const writable=actor.role!=='pi';
+  const canEditRecord=writable&&(actor.role==='admin'||duty?.duty_type==='recorder');
+  return {canEditRecord,canPublishRecord:canEditRecord,canManageAttendance:canEditRecord,canRecordOthersQa:canEditRecord,canAddPaper:writable&&(canEditRecord||duty?.duty_type==='presenter')};
+}
+export function canEditReview(actor:{id:string;role:string},ownerId:string|null){
+  return actor.role==='admin'||(actor.role==='member'&&actor.id===ownerId);
+}
 export type Duty = {id:number; date:string; user_id:string; name:string; duty_type:'presenter'|'recorder'|'host'; paper_title:string|null; paper_doi:string|null};
 export function hashPassword(password:string){const salt=randomBytes(16).toString('hex');return `${salt}:${scryptSync(password,salt,64).toString('hex')}`;}
 export function verifyPassword(password:string, stored:string){const [salt,expected]=stored.split(':');if(!salt||!expected)return false;const actual=scryptSync(password,salt,64);const target=Buffer.from(expected,'hex');return actual.length===target.length&&timingSafeEqual(actual,target);}
