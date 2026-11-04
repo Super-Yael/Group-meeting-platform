@@ -1,0 +1,16 @@
+node_modules/
+.next/
+out/
+dist/
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+*.sqlite*
+.DS_Store
+Meeting_transcript/
+.agents/
+.taste-skill/
+skills-lock.json
+*.tsbuildinfo

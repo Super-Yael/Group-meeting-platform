@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {createDb,addDuty,movePresenter,requestSwap,decideSwap} from './core.js';
+function setup(){const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mm-lab-'));const db=createDb(path.join(dir,'test.sqlite'));return {db,cleanup:()=>{db.close();fs.rmSync(dir,{recursive:true,force:true})}}}
+test('presenter move obeys capacity and own-task rules',()=>{const {db,cleanup}=setup();try{addDuty(db,'fwl','2026-11-04','cyx','recorder');const source=Number(addDuty(db,'fwl','2026-11-04','lxg','presenter'));addDuty(db,'fwl','2026-11-05','lzq','recorder');addDuty(db,'fwl','2026-11-05','sya','presenter');addDuty(db,'fwl','2026-11-05','lpl','presenter');assert.throws(()=>movePresenter(db,'cyx',source,'2026-11-06'),/只能更改自己的汇报/);assert.equal(movePresenter(db,'lxg',source,'2026-11-05').to,'2026-11-05');assert.throws(()=>addDuty(db,'fwl','2026-11-05','cyx','presenter'),/已满/);}finally{cleanup()}});
+test('recorder swap requires target approval and exchanges atomically',()=>{const {db,cleanup}=setup();try{const a=Number(addDuty(db,'fwl','2026-11-04','cyx','recorder'));const b=Number(addDuty(db,'fwl','2026-11-05','lzq','recorder'));const req=Number(requestSwap(db,'cyx',a,b,'实验值班'));assert.throws(()=>decideSwap(db,'lxg',req,true),/只有目标记录人/);decideSwap(db,'lzq',req,true);assert.equal((db.prepare('SELECT user_id FROM schedules WHERE id=?').get(a) as any).user_id,'lzq');assert.equal((db.prepare('SELECT user_id FROM schedules WHERE id=?').get(b) as any).user_id,'cyx');assert.throws(()=>decideSwap(db,'lzq',req,true),/申请已处理/);}finally{cleanup()}});
+test('swap rejects a duplicate duty on either day',()=>{const {db,cleanup}=setup();try{const a=Number(addDuty(db,'fwl','2026-11-04','cyx','recorder'));const b=Number(addDuty(db,'fwl','2026-11-05','lzq','recorder'));addDuty(db,'fwl','2026-11-05','cyx','presenter');assert.throws(()=>requestSwap(db,'cyx',a,b,''),/重复担任任务/);}finally{cleanup()}});
