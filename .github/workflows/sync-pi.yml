@@ -1,0 +1,18 @@
+name: Sync PI Pages branch
+on:
+  push:
+    branches: [main]
+permissions:
+  contents: write
+concurrency:
+  group: sync-pi-pages
+  cancel-in-progress: false
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Keep the PI alias on the production source
+        run: git push origin HEAD:refs/heads/pi
