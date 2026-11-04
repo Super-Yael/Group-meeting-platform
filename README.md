@@ -1,6 +1,6 @@
 # MM Lab Hub
 
-多发性骨髓瘤 / MGTS 课题组的排班、文献研读、会议记录和团队知识库。前端为 Next.js App Router 静态导出，部署到 Cloudflare Pages；Node API 和 SQLite 在自有服务器运行。
+多发性骨髓瘤 / MGTS 课题组的排班、文献研读、会议记录和团队知识库。前端为 Next.js App Router 静态导出，部署到 Cloudflare Pages；Node API 和 SQLite 在自有服务器运行。生产浏览器通过同站点 `/api/*` 入口访问，由 Pages Function 转发到服务器，登录不依赖跨站 Cookie。
 
 ## 本地运行
 

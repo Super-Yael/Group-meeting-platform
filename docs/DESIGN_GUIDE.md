@@ -36,7 +36,9 @@ PI 可查看日程、会议记录、提问追踪、团队文档与周期总结�
                                              → SQLite WAL（服务器本地盘）
 ```
 
-Cloudflare Pages 的 Next.js 静态导出没有运行时 API 路由和 Server Actions，本项目所有动态操作经独立 API 访问。前端构建时写入 `NEXT_PUBLIC_API_URL`；它是公开 URL，不是密钥。后端 `WEB_ORIGIN` 精确允许 Pages 域名与自定义站点域名。生产 Cookie 使用 `Secure`、`HttpOnly`、`SameSite=None`，因此前后端都必须 HTTPS。服务端按 Origin 拒绝跨站写入。若浏览器禁用第三方 Cookie，建议在同一主域下配置 `app.example.com` 与 `api.example.com`。
+Next.js App Router 静态导出不承载 API 路由或 Server Actions。`apps/web/functions/api/[[path]].ts` 是独立的 Pages Function，仅把同站点 `/api/*` 请求转发到 `https://lab-api.yyael.com`；身份验证、业务逻辑和 SQLite 全部继续在 4C20G 运行。静态资源不经过函数，由 `public/_routes.json` 限定函数路由范围。
+
+生产前端始终请求当前网站的 `/api/*`，不直接连接另一个 API 域名。代理保留请求体、会话和下载流，返回 `Cache-Control: no-store`，将会话 Cookie 转为当前站点的 `Secure`、`HttpOnly`、`SameSite=Lax` Cookie，避免手机浏览器的第三方 Cookie 限制。代理拒绝外站 Origin 和上游跳转，目标 API 地址固定，不能当作任意网址代理。服务器 `WEB_ORIGIN` 仍精确允许正式 Pages 域名；自定义域名需要同步加入允许列表。`NEXT_PUBLIC_API_URL` 仅用于本地开发；已有 Pages 同名变量不会再改变生产请求地址。
 
 SQLite 开启 WAL、外键和 `busy_timeout=5000`。对 6–20 人的团队足够轻量，但不承诺固定的亚毫秒响应，也不适合把数据库置于 NFS。5 Mbps 上行容量需要根据文件大小和并发实测；静态资源由 Pages 分发，API 返回 JSON，Word/PDF 导出仍消耗 VPS 带宽。
 
@@ -77,7 +79,7 @@ WantedBy=multi-user.target
 
 ## 8. Cloudflare Pages
 
-等用户创建 Pages 项目后，连接公开 GitHub 仓库。根目录设 `apps/web`，构建命令 `npm run build`，输出目录 `out`，框架预设选 **Next.js (Static HTML Export)**。设置构建变量 `NEXT_PUBLIC_API_URL=https://lab-api.yyael.com`。第一次部署获得 `*.pages.dev` 后，将其加入服务器 `WEB_ORIGIN`。若改为自定义域名，也同步更新 `WEB_ORIGIN`。无需把 API 密钥写到前端变量。
+等用户创建 Pages 项目后，连接公开 GitHub 仓库。根目录设 `apps/web`，构建命令 `npm run build`，输出目录 `out`，框架预设选 **Next.js (Static HTML Export)**。生产环境无需设置 `NEXT_PUBLIC_API_URL`，使用同站点 `/api/*`；构建会自动发现 `apps/web/functions/` 并部署转发函数。第一次部署获得 `*.pages.dev` 后，将其加入服务器 `WEB_ORIGIN`。若改为自定义域名，也同步更新 `WEB_ORIGIN`。无需把 API 密钥写到前端变量。
 
 ## 9. 公开仓库与数据安全
 
