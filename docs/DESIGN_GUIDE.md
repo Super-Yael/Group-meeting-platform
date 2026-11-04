@@ -2,7 +2,7 @@
 
 ## 1. 产品边界
 
-平台服务冯汶乐主持的 MM / MGTS 文献研读小组。六位预置成员中，冯汶乐为管理员与常见主持人；A 组为龙星光、盛诣桉；B 组为陈怡希、李芷琪、李佩琳。团队还可将主持轮值交给任意成员。它是单团队协作应用，当前不提供多租户计费，因此“ SaaS ”指通过浏览器持续使用的团队服务，而非已经实现租户隔离的商业产品。
+平台服务冯汶乐主持的 MM / MGTS 文献研读小组。七位预置账号中，陈海生（`chs`）为 PI 只读账号，冯汶乐为管理员与常见主持人；A 组为龙星光、盛诣桉；B 组为陈怡希、李芷琪、李佩琳。团队还可将主持轮值交给任意成员。它是单团队协作应用，当前不提供多租户计费，因此“ SaaS ”指通过浏览器持续使用的团队服务，而非已经实现租户隔离的商业产品。
 
 需求依据是本地 `Meeting_transcript/26.11.04.txt` 的四段会议转录。转录存在口语识别误差，界面不预置医学结论与真实病例数值；记录人应回看原文与 DOI。老师明确提出固定会议号、每日主持与记录、文献汇报、每人 1–2 问、原始记录可溯源、每日 Word、周总结、半月提出论文方案，以及干湿实验和成本可行性。单日“2–3 汇报 + 1 记录、最多 4 位核心任务成员”按产品规则执行；主持单列。某些改期会让原日期少于 2 位汇报，界面提示管理员补位，允许成员先自助完成改期，避免个人任务被锁死。
 
@@ -11,6 +11,8 @@
 左侧：概览、会议日程、会议记录、团队文档；底部“我的账户”。移动端折叠为抽屉，保留全部入口。概览回答“今天谁讲、谁记、还有什么待处理”；日程回答“哪天有空位与谁需要互换”；记录页回答“今天形成了什么证据与下一步”；文档页沉淀跨日知识；账户页管理个人密码、主题与管理员设置。
 
 管理员可以生成/增删排班、配置会议号并生成成员一次性邀请码、编辑任意日记录。成员可以修改自己的汇报日期，记录人可向另一日记录人发起互换，目标记录人同意/拒绝。每日记录由当天记录人编辑，管理员可协助。每位成员可以登记自己的提问；记录人可以代录现场提问。团队文档创建者及管理员可修改文档。
+
+PI 可查看日程、会议记录、提问追踪、团队文档与周期总结，并导出已发布记录。PI 不参与日常任务排班和成员必问打卡；所有团队内容写入接口统一返回 403，个人密码与显示偏好可自行修改。管理员可在现有“我的账户”页面为 PI 生成一次性邀请码；专门的管理后台留待后续迭代。既有数据库会事务迁移账号角色约束，保留密码、会话和外键关联。
 
 ## 3. 关键流程与约束
 
@@ -30,7 +32,7 @@
 
 ```
 浏览器 → Cloudflare Pages（Next.js 15 App Router 静态导出）
-       → HTTPS api.example.com → 反向代理 → Node 22 / Express API（127.0.0.1:4000）
+       → HTTPS lab-api.yyael.com → Cloudflare Tunnel → 4C20G Node API（127.0.0.1:4000）
                                              → SQLite WAL（服务器本地盘）
 ```
 
@@ -42,7 +44,7 @@ SQLite 开启 WAL、外键和 `busy_timeout=5000`。对 6–20 人的团队足�
 
 `users`：身份、分组、密码哈希（scrypt 加盐）；`sessions`：14 天登录会话，只存 token 哈希；`invites`：7 天一次性邀请码哈希，成员凭姓名拼音首字母账号激活并自行设置密码；`settings`：会议号和链接；`schedules`：日期、成员、任务，唯一约束防重复与双记录人；`swap_requests`：待同意、已同意、拒绝、失效等状态；`attendance`：每天出席名单；`daily_records`：结构化栏目、自定义段落 JSON、草稿/发布；`papers`：文献来源；`qa_logs`：提问与追踪状态；`reviews`：周/半月总结；`documents`：知识库；`audit_log`：关键操作。
 
-初始版本以 SQL `CREATE TABLE IF NOT EXISTS` 建表，后续增加字段须提供显式迁移脚本和回滚方案。SQLite 文件和 WAL/SHM 文件必须同目录备份。推荐使用 `sqlite3 .backup` 或 `VACUUM INTO` 得到一致快照，定时加密并上传异地存储，至少每月演练一次恢复。保留 7 个日备份、4 个周备份可作为起点，具体取决于团队数据政策。
+初始版本以 SQL `CREATE TABLE IF NOT EXISTS` 建表，后续增加字段须提供显式迁移脚本和回滚方案。SQLite 文件和 WAL/SHM 文件必须同目录备份。仓库中的 `deploy/backup.mjs` 使用 SQLite 在线备份 API 并运行完整性检查；服务器计时器每天北京时间约 04:00 执行，保留最近 14 份本地备份。配置 `RCLONE_TARGET` 后可同步到异地存储；当前 OneDrive 尚未授权，异地同步还未启用。至少每月演练一次恢复。
 
 ## 6. 本地开发
 
@@ -71,11 +73,11 @@ ReadWritePaths=/var/lib/mm-lab
 WantedBy=multi-user.target
 ```
 
-`/etc/mm-lab.env` 权限 0600，含 `NODE_ENV=production`、`PORT=4000`、`DB_PATH=/var/lib/mm-lab/lab.sqlite`、`WEB_ORIGIN=https://<你的Pages域名>`、`ADMIN_PASSWORD=<初始密码>`、`PDF_FONT_PATH=<中文字体路径>`、`PDF_FONT_NAME=NotoSansCJKsc-Regular`（TTC 字体集合时）。数据库已有管理员密码后，可从环境文件移除初始密码。反向代理只暴露 HTTPS，API 进程只监听 `127.0.0.1`，限制 `/api` 请求体和请求速率，开启访问日志轮转。
+`/etc/mm-lab.env` 权限 0600，含 `NODE_ENV=production`、`PORT=4000`、`DB_PATH=/var/lib/mm-lab/lab.sqlite`、`WEB_ORIGIN=https://<你的Pages域名>`、`ADMIN_PASSWORD=<初始密码>`、`PDF_FONT_PATH=<中文字体路径>`、`PDF_FONT_NAME=NotoSansCJKsc-Regular`（TTC 字体集合时）。数据库已有管理员密码后，可从环境文件移除初始密码。反向代理只暴露 HTTPS，API 进程只监听 `127.0.0.1`，限制 `/api` 请求体和请求速率，开启访问日志轮转。服务器为 NAT 环境，公网 80/443 未映射到本机；当前使用服务器已有的 Cloudflare Tunnel，将 `lab-api.yyael.com` 路由至服务器的 `http://127.0.0.1:4000`，由 Cloudflare 提供公网 HTTPS。Tunnel 凭据仅保存在服务器，不放入仓库。`deploy/Caddyfile.example` 仅供未来具备独立公网 80/443 的环境参考。
 
 ## 8. Cloudflare Pages
 
-等用户创建 Pages 项目后，连接公开 GitHub 仓库。根目录设 `apps/web`，构建命令 `npm run build`，输出目录 `out`，框架预设选 **Next.js (Static HTML Export)**。设置构建变量 `NEXT_PUBLIC_API_URL=https://api.example.com`。第一次部署获得 `*.pages.dev` 后，将其加入服务器 `WEB_ORIGIN`。若改为自定义域名，也同步更新 `WEB_ORIGIN`。无需把 API 密钥写到前端变量。
+等用户创建 Pages 项目后，连接公开 GitHub 仓库。根目录设 `apps/web`，构建命令 `npm run build`，输出目录 `out`，框架预设选 **Next.js (Static HTML Export)**。设置构建变量 `NEXT_PUBLIC_API_URL=https://lab-api.yyael.com`。第一次部署获得 `*.pages.dev` 后，将其加入服务器 `WEB_ORIGIN`。若改为自定义域名，也同步更新 `WEB_ORIGIN`。无需把 API 密钥写到前端变量。
 
 ## 9. 公开仓库与数据安全
 

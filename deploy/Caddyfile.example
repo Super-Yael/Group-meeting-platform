@@ -1,0 +1,5 @@
+# Replace with your API subdomain after DNS points to 4C20G.
+api.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:4000
+}
