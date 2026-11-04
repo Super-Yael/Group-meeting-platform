@@ -32,6 +32,19 @@ app.post('/api/activate',wrap((req,res)=>{const uid=bodyText(req.body.userId,40)
 // Team content is read-only for PI; personal password and login routes remain available.
 app.use('/api',(req,_res,next)=>{try{if(!['GET','HEAD','OPTIONS'].includes(req.method))assertContentWrite(requireUser(req).role);next();}catch(error){next(error);}});
 app.put('/api/settings',wrap((req,res)=>{const u=requireAdmin(req);for(const [key,value] of Object.entries({meeting_number:bodyText(req.body.meetingNumber,60),meeting_url:bodyText(req.body.meetingUrl,500),meeting_time:bodyText(req.body.meetingTime,100),meeting_cycle:bodyText(req.body.meetingCycle,200)})){if(key==='meeting_url'&&value&&!/^https:\/\//.test(value))throw new Error('会议链接必须是 HTTPS');db.prepare('INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key,value);}audit(db,u.id,'settings.update',{});res.json({ok:true});}));
+app.get('/api/pi/overview',wrap((req,res)=>{
+ const u=requireUser(req);if(!['pi','admin'].includes(u.role))throw Object.assign(new Error('仅 PI 或管理员可访问'),{status:403});
+ const from=valDate(req.query.from),to=valDate(req.query.to);
+ if(to<from||Date.parse(to)-Date.parse(from)>365*86400000)throw new Error('请选择一年以内的有效区间');
+ const records=db.prepare('SELECT r.*,u.name AS recorder_name FROM daily_records r LEFT JOIN users u ON u.id=r.recorder_id WHERE date BETWEEN ? AND ? ORDER BY date DESC').all(from,to);
+ const reviews=db.prepare('SELECT r.*,u.name AS owner_name FROM reviews r LEFT JOIN users u ON u.id=r.owner_id WHERE period_start<=? AND period_end>=? ORDER BY period_start DESC').all(to,from);
+ const questionStatus=req.query.questionStatus==='resolved'?'resolved':'open',offset=Math.max(0,Math.min(100000,Math.floor(Number(req.query.offset)||0)));
+ const questions=db.prepare("SELECT q.*,u.name AS questioner_name FROM qa_logs q JOIN users u ON u.id=q.questioner_id WHERE q.status=? ORDER BY CASE WHEN follow_up_date IS NULL OR follow_up_date='' THEN 1 ELSE 0 END,follow_up_date,date LIMIT 200 OFFSET ?").all(questionStatus,offset);
+ const questionCount=(db.prepare("SELECT COUNT(*) AS n FROM qa_logs WHERE status='open'").get() as {n:number}).n;
+ const paperCount=(db.prepare('SELECT COUNT(*) AS n FROM papers WHERE date BETWEEN ? AND ?').get(from,to) as {n:number}).n;
+ const questionTotal=(db.prepare('SELECT COUNT(*) AS n FROM qa_logs WHERE status=?').get(questionStatus) as {n:number}).n;
+ res.json({questionTotal,from,to,updatedAt:new Date().toISOString(),records,reviews,questions,questionCount,paperCount,duties:listDuties(db,from,to)});
+}));
 app.get('/api/schedule',wrap((req,res)=>{requireUser(req);const from=valDate(req.query.from),to=valDate(req.query.to);res.json({duties:listDuties(db,from,to),swaps:db.prepare(`SELECT r.*,a.user_id AS source_user_id,b.user_id AS target_user_id,ua.name AS requester_name,ub.name AS target_name FROM swap_requests r JOIN schedules a ON a.id=r.source_schedule_id JOIN schedules b ON b.id=r.target_schedule_id JOIN users ua ON ua.id=r.requester_id JOIN users ub ON ub.id=b.user_id WHERE r.status='pending' AND (r.source_date BETWEEN ? AND ? OR r.target_date BETWEEN ? AND ?) ORDER BY r.created_at DESC`).all(from,to,from,to)});}));
 app.post('/api/schedule',wrap((req,res)=>{const u=requireAdmin(req);const type=req.body.dutyType;if(!['presenter','recorder','host'].includes(type))throw new Error('任务类型无效');const result=addDuty(db,u.id,valDate(req.body.date),bodyText(req.body.userId,40),type);res.json({id:result});}));
 app.delete('/api/schedule/:id',wrap((req,res)=>{const u=requireAdmin(req);const duty=db.prepare('SELECT * FROM schedules WHERE id=?').get(id(req.params.id)) as any;if(!duty)throw new Error('任务不存在');db.transaction(()=>{db.prepare('DELETE FROM schedules WHERE id=?').run(duty.id);audit(db,u.id,'schedule.remove',duty);})();res.json({ok:true});}));

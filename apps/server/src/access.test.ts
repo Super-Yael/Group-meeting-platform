@@ -33,7 +33,7 @@ test('PI can read and export but every team mutation is denied by the API',async
   assert.equal(login.status,200);
   const cookie=login.headers.get('set-cookie')!.split(';')[0];
   const headers={'Content-Type':'application/json',Cookie:cookie};
-  for(const route of ['/api/bootstrap','/api/schedule?from=2026-11-04&to=2026-11-05','/api/records/2026-11-04','/api/documents','/api/reviews','/api/export?from=2026-11-04&to=2026-11-04&format=docx']){
+  for(const route of ['/api/pi/overview?from=2026-11-04&to=2026-11-05','/api/bootstrap','/api/schedule?from=2026-11-04&to=2026-11-05','/api/records/2026-11-04','/api/documents','/api/reviews','/api/export?from=2026-11-04&to=2026-11-04&format=docx']){
    const response=await fetch(base+route,{headers});assert.equal(response.status,200,route);await response.arrayBuffer();
   }
   const writes=[['POST','/api/schedule'],['DELETE','/api/schedule/1'],['POST','/api/schedule/generate'],['POST','/api/schedule/1/move'],['POST','/api/swaps'],['POST','/api/swaps/1/decide'],['PUT','/api/records/2026-11-04'],['POST','/api/records/2026-11-04/publish'],['PUT','/api/attendance/2026-11-04/lxg'],['POST','/api/papers'],['POST','/api/qa'],['PUT','/api/qa/1'],['POST','/api/documents'],['PUT','/api/documents/1'],['PUT','/api/reviews'],['PUT','/api/settings'],['POST','/api/admin/invite']];

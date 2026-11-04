@@ -32,6 +32,9 @@ test('date-specific permissions and review ownership are enforced by the API',as
  try{
   let ready=false;for(let i=0;i<60;i++){try{ready=(await fetch(base+'/health')).ok;}catch{}if(ready)break;await new Promise(resolve=>setTimeout(resolve,100));}
   assert.ok(ready,'test API started');
+  assert.equal((await request('lxg','GET','/api/pi/overview?from=2026-11-04&to=2026-11-05')).status,403);
+  const piOverview=await request('chs','GET','/api/pi/overview?from=2026-11-01&to=2026-11-14');assert.equal(piOverview.status,200);assert.equal(piOverview.body.reviews.length,2);assert.equal(piOverview.body.duties.length,4);
+  assert.equal((await request('chs','GET','/api/pi/overview?from=2026-11-05&to=2026-11-01')).status,400);
   await t.test('record responses expose permissions for the requested date and signed-in identity',async()=>{
    for(const uid of people){
     const result=await request(uid,'GET',`/api/records/${date}`);assert.equal(result.status,200);
