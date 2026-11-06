@@ -5,6 +5,7 @@ import {api,post,put} from '@/lib/api';
 import {Button} from '@/components/ui/button';
 import {Modal} from '@/components/ui/dialog';
 import {QuestionAnswers,type QuestionAnswer} from '@/components/question-answers';
+import {saveNotebook,NotebookConflictError,type SaveConflict,type ConflictChoice} from '@/lib/notebook-save';
 
 type Person={id:string;name:string;role:string};
 type Kind='presentation'|'question'|'analysis'|'mentor_summary'|'speech';
@@ -19,10 +20,11 @@ function Field({label,children}:{label:string;children:React.ReactNode}){return 
 export function MeetingNotebook({date,user,users,readOnly,onDateChange,download,onUpdated,onDirtyChange}:{date:string;user:Person;users:Person[];readOnly:boolean;onDateChange:(date:string)=>void;download:(format:'docx'|'pdf',from:string,to:string)=>void;onUpdated:()=>void;onDirtyChange:(dirty:boolean)=>void}){
  const [data,setData]=useState<Data|null>(null),[blocks,setBlocks]=useState<Block[]>([]),[loading,setLoading]=useState(true),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [pane,setPane]=useState('process'),[filter,setFilter]=useState('all'),[dialog,setDialog]=useState<'question'|'paper'|''>(''),[question,setQuestion]=useState<Question|null>(null),[answerDrafts,setAnswerDrafts]=useState<QuestionAnswer[]>([]),[form,setForm]=useState<Record<string,string>>({});
- const request=useRef(0);
+ const [conflicts,setConflicts]=useState<SaveConflict[]>([]);
+ const request=useRef(0),baseline=useRef<Block[]>([]),saving=useRef(false),publishIntent=useRef(false);
  const load=useCallback(async()=>{
   const serial=++request.current;setLoading(true);setError('');
-  try{const next=await api<Data>(`/api/records/${date}`);if(serial!==request.current)return;setData(next);setBlocks(next.blocks);setDirty(false);}catch(e){if(serial===request.current)setError(e instanceof Error?e.message:'记录加载失败');}finally{if(serial===request.current)setLoading(false);}
+  try{const next=await api<Data>(`/api/records/${date}`);if(serial!==request.current)return;baseline.current=next.blocks;setData(next);setBlocks(next.blocks);setDirty(false);setConflicts([]);}catch(e){if(serial===request.current)setError(e instanceof Error?e.message:'记录加载失败');}finally{if(serial===request.current)setLoading(false);}
  },[date,user.id]);
  useEffect(()=>{setData(null);setNotice('');void load();return()=>{request.current++;}},[load]);
  useEffect(()=>{if(!dirty)return;const warn=(event:BeforeUnloadEvent)=>{event.preventDefault();event.returnValue='';};window.addEventListener('beforeunload',warn);return()=>window.removeEventListener('beforeunload',warn);},[dirty]);
@@ -38,16 +40,17 @@ export function MeetingNotebook({date,user,users,readOnly,onDateChange,download,
  };
  const move=(index:number,delta:number)=>{setBlocks(old=>{const next=[...old];[next[index],next[index+delta]]=[next[index+delta],next[index]];return next;});setDirty(true);};
  const remove=(block:Block)=>{setBlocks(old=>old.filter(b=>b.id!==block.id).map(b=>b.relatedBlockId===block.id?{...b,relatedBlockId:undefined}:b));setDirty(true);if(block.questionId)setNotice('已移除提问环节；已登记的问题仍保留在问题追踪中。');};
- const save=async(publish=false)=>{
-  if(!data)return;setBusy(true);setError('');setNotice('');
+ const save=async(publish=false,choice?:ConflictChoice)=>{
+  if(!data||saving.current)return;saving.current=true;publishIntent.current=publish;setBusy(true);setError('');setNotice('');setConflicts([]);
   try{
-   const saved:{revision:number;blocks:Block[]}=await put(`/api/records/${date}`,{blocks,revision:data.record?.revision||0});
+   const saved=await saveNotebook<Block>({base:baseline.current,local:blocks,choice,read:()=>api<Data>(`/api/records/${date}`),write:body=>api<{revision:number;blocks:Block[]}>(`/api/records/${date}`,{method:'PUT',body:JSON.stringify(body)})});
+   baseline.current=saved.blocks;
    setBlocks(saved.blocks);setDirty(false);
    setData(old=>old?{...old,record:{revision:saved.revision,status:'draft',updated_at:new Date().toISOString()}}:old);
    if(publish)await post(`/api/records/${date}/publish`,{});
    await load();setNotice(publish?'记录已发布入册':'会议环节与提问状态已保存');onUpdated();
   }
-  catch(e){setError(e instanceof Error?e.message:'保存失败');}finally{setBusy(false);}
+  catch(e){if(e instanceof NotebookConflictError)setConflicts(e.conflicts);setError(e instanceof Error?e.message:'保存失败');}finally{saving.current=false;setBusy(false);}
  };
  const personSelect=(value:string,update:(value:string)=>void,label:string)=><select className="select" aria-label={label} value={value} disabled={busy} onChange={e=>update(e.target.value)}><option value="">未指定</option>{users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select>;
  const insert=(after?:number)=><select className="select insert-block" aria-label={after===undefined?'添加环节':`在环节 ${after+1} 后添加`} disabled={busy} value="" onChange={e=>add(e.target.value as Kind,after)}><option value="">＋ {after===undefined?'添加环节':'在此后添加'}</option>{options.map(([kind,label])=><option key={kind} value={kind}>{label}</option>)}</select>;
@@ -58,9 +61,9 @@ export function MeetingNotebook({date,user,users,readOnly,onDateChange,download,
    if(dialog==='paper')await post('/api/papers',{...form,date});
    else if(question)await put(`/api/qa/${question.id}`,{...form,answers:answerDrafts,revision:question.revision});
    else await post('/api/qa',{...form,date,answers:answerDrafts});
-   // Refresh questions without discarding text in other unsaved meeting blocks.
+   // Keep the loaded baseline and local edits together; the save path merges sidebar changes by field.
    const next=await api<Data>(`/api/records/${date}`);setData(next);
-   if(dirty)setBlocks(old=>old.map(b=>{const q=next.qa.find(q=>q.id===b.questionId);return q?{...b,content:q.question,speakerId:q.questioner_id,status:q.status,answers:q.answers,answer:q.answer,answererId:q.answerer_id||'',followUpDate:q.follow_up_date||'',questionRevision:q.revision}:b;}));else setBlocks(next.blocks);
+   if(!dirty){baseline.current=next.blocks;setBlocks(next.blocks);}
    setDialog('');setNotice(dialog==='paper'?'文献已添加':'提问及追踪状态已更新');onUpdated();
   }catch(e){setError(e instanceof Error?e.message:'保存失败');}finally{setBusy(false);}
  };
@@ -69,10 +72,18 @@ export function MeetingNotebook({date,user,users,readOnly,onDateChange,download,
  const allQuestions=[...(data?.qa||[]),...(data?.followUps||[])];
  const visibleQuestions=allQuestions.filter(q=>filter==='all'||q.status===filter);
  const updateAttendance=async(uid:string,present:boolean)=>{setBusy(true);try{await put(`/api/attendance/${date}/${uid}`,{present});setData(old=>old?{...old,attendance:[...old.attendance.filter(a=>a.user_id!==uid),{user_id:uid,present:present?1:0}]}:old);}catch(e){setError(e instanceof Error?e.message:'更新失败');}finally{setBusy(false);}};
+ const conflictText=(value:unknown):string=>{
+  if(value===undefined)return '已移除';
+  if(typeof value==='string')return users.find(u=>u.id===value)?.name||states[value as Status]||labels[value as Kind]||blocks.find(b=>b.id===value)?.title||value||'未填写';
+  if(Array.isArray(value))return value.map(conflictText).join('\n\n');
+  if(value&&typeof value==='object'){const v=value as {title?:string;speakerId?:string;content?:string};return [v.title,v.speakerId?name(v.speakerId):'',v.content].filter(Boolean).join('\n')||'未填写';}
+  return String(value??'未填写');
+ };
  return <section className="meeting-notebook">
   <h1 className="page-title">{readOnly?'会议档案':'会议记录'}</h1><p className="page-desc">按现场顺序记录分享、提问、分析、老师总结与发言。每个环节都可自由扩展。</p>
   <div className="notebook-toolbar"><div className="row-actions"><input aria-label="记录日期" type="date" className="input notebook-date" value={date} onChange={e=>changeDate(e.target.value)}/><span className="badge gray">{data?.record?.status==='published'?'已发布':'草稿'}</span><span className="small muted">记录：{data?.duties.find(d=>d.duty_type==='recorder')?.name||'待安排'}</span></div><div className="row-actions"><Button onClick={()=>download('docx',date,date)}><Download size={15}/>Word</Button><Button onClick={()=>download('pdf',date,date)}>PDF</Button></div></div>
   {error&&<div role="alert" className="notice error">{error}</div>}{notice&&<div role="status" className="notice">{notice}</div>}
+  {!!conflicts.length&&<div className="card pad"><p>只需选择发生冲突的内容，其他修改会自动合并。</p>{conflicts.map((conflict,i)=><details key={i}><summary>{conflict.label}</summary><p className="small muted">本页内容</p><div className="doc-content">{conflictText(conflict.local)}</div><p className="small muted">服务器内容</p><div className="doc-content">{conflictText(conflict.remote)}</div></details>)}<div className="row-actions"><Button disabled={busy} onClick={()=>void save(publishIntent.current,'local')}>冲突处使用本页内容</Button><Button disabled={busy} onClick={()=>void save(publishIntent.current,'remote')}>冲突处使用服务器内容</Button></div></div>}
   {loading?<p role="status">正在读取会议记录…</p>:!data?<Button onClick={()=>void load()}>重新载入</Button>:<>
    <div className="mobile-pane-switch segment"><button className={pane==='process'?'active':''} onClick={()=>setPane('process')}>会议过程</button><button className={pane==='questions'?'active':''} onClick={()=>setPane('questions')}>问题追踪</button></div>
    <div className="notebook-layout">
