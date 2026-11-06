@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {ensureMeetingSchema} from './meeting-records.js';
 
 export type User = {id:string; name:string; role:'admin'|'member'|'pi'; team_group:string};
 export function assertContentWrite(role:string){if(role==='pi')throw Object.assign(new Error('PI 账号为只读，不能修改团队内容'),{status:403});}
@@ -52,6 +53,7 @@ export function createDb(filename:string){
   const insert=db.prepare('INSERT OR IGNORE INTO users(id,name,role,team_group) VALUES(?,?,?,?)');for(const p of people)insert.run(p.id,p.name,p.role,p.team_group);
   const admin=db.prepare('SELECT password_hash FROM users WHERE id=?').get('fwl') as {password_hash:string|null};
   if(!admin.password_hash&&process.env.ADMIN_PASSWORD)db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(process.env.ADMIN_PASSWORD),'fwl');
+  ensureMeetingSchema(db);
   return db;
 }
 export function listDuties(db:Database.Database,from:string,to:string){return db.prepare(`SELECT s.*,u.name,u.team_group FROM schedules s JOIN users u ON u.id=s.user_id WHERE date BETWEEN ? AND ? ORDER BY date,CASE duty_type WHEN 'host' THEN 0 WHEN 'presenter' THEN 1 ELSE 2 END,id`).all(from,to) as Duty[];}
