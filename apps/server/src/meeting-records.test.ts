@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import Database from 'better-sqlite3';
+import {unzipSync,strFromU8} from 'fflate';
 import {createDb,addDuty} from './core.js';
 import {meetingBlocks,saveMeetingBlocks} from './meeting-records.js';
 
@@ -32,12 +33,19 @@ test('legacy notes and questions survive migration and ordered block saves are a
   assert.ok(db.prepare('SELECT 1 FROM qa_logs WHERE id=?').get(qid),'removing a block retains tracked questions');
   assert.ok(!meetingBlocks(db,'2026-11-04',db.prepare('SELECT * FROM daily_records').get()).some(b=>b.questionId===qid),'removed blocks stay removed');
   assert.ok(meetingBlocks(db,'2026-11-04',db.prepare('SELECT * FROM daily_records').get(),true).some(b=>b.questionId===qid),'exports still include tracked questions');
+  const many=meetingBlocks(db,'2026-11-04',db.prepare('SELECT * FROM daily_records').get(),true);
+  const linked=many.find(b=>b.questionId===qid)!;
+  linked.answers=[{id:'one',speakerId:'lxg',content:'第一位回答'},{id:'two',speakerId:'sya',content:'第二位回答'},{id:'three',speakerId:'lxg',content:'第一位补充'}];
+  saveMeetingBlocks(db,'2026-11-04','cyx',{blocks:many,revision:2});
+  const refreshed=meetingBlocks(db,'2026-11-04',db.prepare('SELECT * FROM daily_records').get());
+  assert.deepEqual(refreshed.find(b=>b.questionId===qid)!.answers,linked.answers,'meeting-block saves preserve independent ordered replies');
+
  }finally{db.close();fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test('meeting sequence, recorder question updates, reopening, conflicts and export work together',async()=>{
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'mm-notebook-api-')),filename=path.join(dir,'test.sqlite'),db=createDb(filename),date='2026-11-06';
- for(const uid of ['fwl','cyx','lxg','lzq','chs'])db.prepare("INSERT INTO sessions VALUES(?,?,datetime('now','+1 day'))").run(createHash('sha256').update('test-'+uid).digest('hex'),uid);
+ for(const uid of ['fwl','cyx','lxg','sya','lzq','chs'])db.prepare("INSERT INTO sessions VALUES(?,?,datetime('now','+1 day'))").run(createHash('sha256').update('test-'+uid).digest('hex'),uid);
  addDuty(db,'fwl',date,'cyx','recorder');addDuty(db,'fwl',date,'lxg','presenter');addDuty(db,'fwl',date,'sya','presenter');
  const socket=createServer().listen(0,'127.0.0.1');await once(socket,'listening');const port=(socket.address() as {port:number}).port;await new Promise<void>(resolve=>socket.close(()=>resolve()));
  const child=spawn(process.execPath,['--import','tsx',path.join(__dirname,'index.ts')],{env:{...process.env,DB_PATH:filename,PORT:String(port),NODE_ENV:'test'},stdio:'ignore'}),base=`http://127.0.0.1:${port}`;
@@ -54,7 +62,7 @@ test('meeting sequence, recorder question updates, reopening, conflicts and expo
   assert.equal((await call('lzq','PUT','/api/qa/'+q.id,{status:'resolved'})).status,403);
   assert.equal((await call('cyx','PUT','/api/qa/'+q.id,{status:'resolved',answer:'老师补充的答案',answererId:'chs',revision:q.revision})).status,200);
   let next=await call('chs','GET','/api/records/'+date);
-  assert.equal(next.data.blocks[1].status,'resolved');assert.equal(next.data.blocks[1].answer,'老师补充的答案');
+  assert.equal(next.data.blocks[1].status,'resolved');assert.equal(next.data.blocks[1].answer,'老师补充的答案');assert.equal(next.data.blocks[1].answers[0].speakerId,'chs');
   assert.equal((await call('cyx','GET','/api/records/2026-11-09')).data.followUps.length,0);
   assert.equal((await call('cyx','PUT','/api/records/'+date,{blocks:saved.data.blocks,revision:1})).status,409,'stale question edits do not overwrite newer answers');
   q=next.data.qa[0];
@@ -70,6 +78,33 @@ test('meeting sequence, recorder question updates, reopening, conflicts and expo
   assert.equal((await call('cyx','POST',`/api/records/${date}/publish`,{})).status,200);
   const exported=await fetch(base+`/api/export?from=${date}&to=${date}&format=docx`,{headers:{Cookie:'mm_session=test-chs'}});
   assert.equal(exported.status,200);assert.deepEqual([...new Uint8Array(await exported.arrayBuffer()).slice(0,2)],[80,75]);
+  // One question can retain an ordered round of replies, including a later reply by the same person.
+  const responses=[{id:'reply-a',speakerId:'sya',content:'第一位的解释'},{id:'reply-b',speakerId:'lzq',content:'第二位提出不同看法'},{id:'reply-c',speakerId:'sya',content:'第一位再次补充'}];
+  const round=await call('cyx','POST','/api/qa',{date,questionerId:'lxg',question:'请大家逐一回答',answers:responses,status:'tracking'});
+  assert.equal(round.status,200);
+  let roundQuestion=(await call('cyx','GET','/api/records/'+date)).data.qa.find((q:any)=>q.id===round.data.id);
+  assert.deepEqual(roundQuestion.answers,responses);
+  assert.match(roundQuestion.answer,/盛诣桉/);assert.match(roundQuestion.answer,/李芷琪/);
+  const forged=responses.map(a=>a.id==='reply-b'?{...a,content:'试图覆盖别人的回答'}:a);
+  assert.equal((await call('sya','PUT','/api/qa/'+round.data.id,{answers:forged,revision:roundQuestion.revision})).status,403);
+  const own=responses.map(a=>a.id==='reply-a'?{...a,content:'修改我自己的回答'}:a);
+  assert.equal((await call('sya','PUT','/api/qa/'+round.data.id,{answers:own,revision:roundQuestion.revision})).status,200);
+  roundQuestion=(await call('cyx','GET','/api/records/'+date)).data.qa.find((q:any)=>q.id===round.data.id);
+  assert.equal((await call('cyx','PUT','/api/qa/'+round.data.id,{status:'resolved',revision:roundQuestion.revision})).status,200);
+  roundQuestion=(await call('cyx','GET','/api/records/'+date)).data.qa.find((q:any)=>q.id===round.data.id);
+  assert.deepEqual(roundQuestion.answers,own,'updating question status preserves every reply');
+  assert.equal((await call('cyx','PUT','/api/qa/'+round.data.id,{answers:[...own].reverse(),revision:roundQuestion.revision})).status,200);
+  const ordered=(await call('chs','GET','/api/records/'+date)).data.qa.find((q:any)=>q.id===round.data.id);
+  assert.deepEqual(ordered.answers,[...own].reverse());
+  const multiExport=await fetch(base+`/api/export?from=${date}&to=${date}&format=docx`,{headers:{Cookie:'mm_session=test-chs'}});
+  assert.equal(multiExport.status,200);
+  const xml=strFromU8(unzipSync(new Uint8Array(await multiExport.arrayBuffer()))['word/document.xml']);
+  assert.ok(xml.includes('回答 1 · 盛诣桉：第一位再次补充'));
+  assert.ok(xml.includes('回答 2 · 李芷琪：第二位提出不同看法'));
+  assert.ok(xml.includes('回答 3 · 盛诣桉：修改我自己的回答'));
+  assert.ok(xml.indexOf('第一位再次补充')<xml.indexOf('第二位提出不同看法'));
+
+  assert.equal((await call('chs','PUT','/api/qa/'+round.data.id,{answers:[],revision:ordered.revision})).status,403);
   const bad=[{...reloaded.data.blocks.find((b:any)=>b.kind==='question'),questionId:q.id,questionRevision:999,relatedBlockId:undefined}];
   assert.equal((await call('fwl','PUT','/api/records/2026-11-09',{blocks:bad,revision:0})).status,400);
  }finally{child.kill();await once(child,'exit');db.close();fs.rmSync(dir,{recursive:true,force:true});}

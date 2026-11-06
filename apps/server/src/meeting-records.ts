@@ -1,8 +1,9 @@
 import type Database from 'better-sqlite3';
+import {questionAnswers,answersForWrite,answersText,type QuestionAnswer} from './question-answers.js';
 
 export const blockKinds=['presentation','question','analysis','mentor_summary','speech'] as const;
 export const blockLabels:Record<string,string>={presentation:'分享',question:'提问',analysis:'分析',mentor_summary:'老师总结',speech:'发言'};
-export type MeetingBlock={id:string;kind:typeof blockKinds[number];title:string;speakerId:string;content:string;relatedBlockId?:string;questionId?:number;questionRevision?:number;answer?:string;answererId?:string;status?:'open'|'tracking'|'resolved';followUpDate?:string};
+export type MeetingBlock={id:string;kind:typeof blockKinds[number];title:string;speakerId:string;content:string;relatedBlockId?:string;questionId?:number;questionRevision?:number;answer?:string;answererId?:string;answers?:QuestionAnswer[];status?:'open'|'tracking'|'resolved';followUpDate?:string};
 const fail=(message:string,status=400)=>Object.assign(new Error(message),{status});
 export function ensureMeetingSchema(db:Database.Database){
  const columns=db.pragma('table_info(daily_records)') as {name:string}[];
@@ -14,6 +15,7 @@ export function ensureMeetingSchema(db:Database.Database){
   db.exec('INSERT INTO qa_with_tracking(id,date,questioner_id,answerer_id,question,answer,status,follow_up_date,created_at,updated_at) SELECT id,date,questioner_id,answerer_id,question,answer,status,follow_up_date,created_at,updated_at FROM qa_logs; DROP TABLE qa_logs; ALTER TABLE qa_with_tracking RENAME TO qa_logs');
  })();
  const qaColumns=db.pragma('table_info(qa_logs)') as {name:string}[];
+ if(!qaColumns.some(c=>c.name==='answers_json'))db.exec('ALTER TABLE qa_logs ADD COLUMN answers_json TEXT');
  if(!qaColumns.some(c=>c.name==='revision'))db.exec('ALTER TABLE qa_logs ADD COLUMN revision INTEGER NOT NULL DEFAULT 0');
 }
 export function meetingBlocks(db:Database.Database,date:string,record:any,includeUnlinked=false):MeetingBlock[]{
@@ -26,13 +28,13 @@ export function meetingBlocks(db:Database.Database,date:string,record:any,includ
  const questions=db.prepare('SELECT * FROM qa_logs WHERE date=? ORDER BY id').all(date) as any[];
  if(!blocks.length&&record?.blocks_json==null){
   const presenter=db.prepare("SELECT user_id FROM schedules WHERE date=? AND duty_type='presenter' ORDER BY id LIMIT 1").get(date) as {user_id:string}|undefined;
-  blocks=blockKinds.map(kind=>({id:'default-'+kind,kind,title:blockLabels[kind],speakerId:kind==='presentation'?presenter?.user_id||'':kind==='mentor_summary'?'chs':'',content:'',...(kind==='question'?{status:'open' as const,answer:'',answererId:'',followUpDate:''}:{}),...(['question','analysis'].includes(kind)?{relatedBlockId:'default-presentation'}:{})}));
+  blocks=blockKinds.map(kind=>({id:'default-'+kind,kind,title:blockLabels[kind],speakerId:kind==='presentation'?presenter?.user_id||'':kind==='mentor_summary'?'chs':'',content:'',...(kind==='question'?{status:'open' as const,answer:'',answererId:'',answers:[],followUpDate:''}:{}),...(['question','analysis'].includes(kind)?{relatedBlockId:'default-presentation'}:{})}));
  }
  const linked=new Set(blocks.map(b=>b.questionId));
  for(const q of questions)if((record?.blocks_json==null||includeUnlinked)&&!linked.has(q.id))blocks.push({id:'question-'+q.id,kind:'question',title:'提问',speakerId:q.questioner_id,content:q.question,questionId:q.id});
  return blocks.map(b=>{
   const q=b.kind==='question'&&questions.find(q=>q.id===b.questionId);
-  return q?{...b,speakerId:q.questioner_id,content:q.question,answer:q.answer,answererId:q.answerer_id||'',status:q.status,followUpDate:q.follow_up_date||'',questionRevision:q.revision}:b;
+  return q?{...b,speakerId:q.questioner_id,content:q.question,answers:questionAnswers(q),answer:q.answer,answererId:q.answerer_id||'',status:q.status,followUpDate:q.follow_up_date||'',questionRevision:q.revision}:b;
  });
 }
 export function saveMeetingBlocks(db:Database.Database,date:string,recorderId:string,body:any){
@@ -45,6 +47,7 @@ export function saveMeetingBlocks(db:Database.Database,date:string,recorderId:st
   if(raw.relatedBlockId)b.relatedBlockId=text(raw.relatedBlockId,80);
   if(b.kind==='question'){
    b.status=raw.status||'open';if(!['open','tracking','resolved'].includes(b.status!))throw fail('提问状态无效');
+   if(raw.answers!==undefined)b.answers=answersForWrite(db,raw);
    b.answer=text(raw.answer||'',30000);b.answererId=text(raw.answererId||'',40);b.followUpDate=text(raw.followUpDate||'',10);
    if(b.followUpDate&&(!/^\d{4}-\d{2}-\d{2}$/.test(b.followUpDate)||Number.isNaN(Date.parse(b.followUpDate))||new Date(b.followUpDate).toISOString().slice(0,10)!==b.followUpDate))throw fail('追踪日期无效');
    if(b.answererId&&!db.prepare('SELECT 1 FROM users WHERE id=?').get(b.answererId))throw fail('请选择有效的回答人');
@@ -62,14 +65,16 @@ export function saveMeetingBlocks(db:Database.Database,date:string,recorderId:st
   if(!Number.isInteger(body.revision)||body.revision!==(current?.revision||0))throw fail('记录已被更新，请先保留当前内容，再重新载入',409);
   for(const b of blocks.filter(b=>b.kind==='question')){
    if(b.questionId){
-    const q=db.prepare('SELECT date,revision FROM qa_logs WHERE id=?').get(b.questionId) as {date:string;revision:number}|undefined;
+    const q=db.prepare('SELECT * FROM qa_logs WHERE id=?').get(b.questionId) as any;
     if(!q||q.date!==date)throw fail('不能修改其他日期的问题');
     if(q.revision!==b.questionRevision)throw fail('有问题状态已被更新，请先保留当前内容，再重新载入',409);
     if(!b.content.trim())throw fail('已登记的问题内容不能为空');
-    db.prepare('UPDATE qa_logs SET questioner_id=?,question=?,answer=?,answerer_id=?,status=?,follow_up_date=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(b.speakerId,b.content,b.answer,b.answererId||null,b.status,b.status==='resolved'?null:b.followUpDate||null,b.questionId);
+    b.answers=answersForWrite(db,b,q);b.answer=answersText(db,b.answers);b.answererId=b.answers[0]?.speakerId||'';
+    db.prepare('UPDATE qa_logs SET questioner_id=?,question=?,answer=?,answerer_id=?,answers_json=?,status=?,follow_up_date=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(b.speakerId,b.content,b.answer,b.answererId||null,JSON.stringify(b.answers),b.status,b.status==='resolved'?null:b.followUpDate||null,b.questionId);
     b.questionRevision=q.revision+1;
    }else if(b.content.trim()){
-    b.questionId=Number(db.prepare('INSERT INTO qa_logs(date,questioner_id,question,answer,answerer_id,status,follow_up_date) VALUES(?,?,?,?,?,?,?)').run(date,b.speakerId,b.content,b.answer,b.answererId||null,b.status,b.status==='resolved'?null:b.followUpDate||null).lastInsertRowid);b.questionRevision=0;
+    b.answers=answersForWrite(db,b);b.answer=answersText(db,b.answers);b.answererId=b.answers[0]?.speakerId||'';
+    b.questionId=Number(db.prepare('INSERT INTO qa_logs(date,questioner_id,question,answer,answerer_id,answers_json,status,follow_up_date) VALUES(?,?,?,?,?,?,?,?)').run(date,b.speakerId,b.content,b.answer,b.answererId||null,JSON.stringify(b.answers),b.status,b.status==='resolved'?null:b.followUpDate||null).lastInsertRowid);b.questionRevision=0;
    }
   }
   const summary=(blocks.find(b=>b.kind==='mentor_summary'&&b.content.trim())||blocks.find(b=>b.content.trim()))?.content||'';
