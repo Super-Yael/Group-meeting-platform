@@ -73,9 +73,16 @@ test('meeting sequence, recorder question updates, reopening, conflicts and expo
   assert.equal((await call('cyx','PUT','/api/records/'+date,{blocks:next.data.blocks.toReversed(),revision:1})).status,200);
   const reloaded=await call('cyx','GET','/api/records/'+date);assert.equal(reloaded.data.blocks[0].title,'课后补充');
   assert.equal((db.prepare('SELECT COUNT(*) AS n FROM qa_logs').get() as any).n,1,'saving does not duplicate linked questions');
-  assert.equal((await call('cyx','POST','/api/papers',{date,title:'讨论的文献',presenterId:'lxg'})).status,200);
-  for(const uid of ['sya','cyx','lzq','lpl'])await call('cyx','PUT',`/api/attendance/${date}/${uid}`,{present:false});
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM papers WHERE date=?').get(date) as any).n,0);
+  assert.equal((db.prepare('SELECT COUNT(*) AS n FROM attendance WHERE date=?').get(date) as any).n,0);
   assert.equal((await call('cyx','POST',`/api/records/${date}/publish`,{})).status,200);
+  assert.equal((await call('chs','GET','/api/records/'+date)).data.record.status,'published','missing sources and member questions do not block publication');
+  const emptyDate='2026-11-09';
+  assert.equal((await call('fwl','PUT','/api/records/'+emptyDate,{blocks:[],revision:0})).status,200);
+  assert.equal((await call('chs','POST',`/api/records/${emptyDate}/publish`,{})).status,403,'PI remains read-only');
+  assert.equal((await call('lzq','POST',`/api/records/${emptyDate}/publish`,{})).status,403,'other members cannot publish');
+  assert.equal((await call('fwl','POST',`/api/records/${emptyDate}/publish`,{})).status,200,'no content completeness gate');
+  assert.equal((await call('cyx','POST','/api/papers',{date,title:'讨论的文献',presenterId:'lxg'})).status,200);
   const exported=await fetch(base+`/api/export?from=${date}&to=${date}&format=docx`,{headers:{Cookie:'mm_session=test-chs'}});
   assert.equal(exported.status,200);assert.deepEqual([...new Uint8Array(await exported.arrayBuffer()).slice(0,2)],[80,75]);
   // One question can retain an ordered round of replies, including a later reply by the same person.
@@ -106,6 +113,6 @@ test('meeting sequence, recorder question updates, reopening, conflicts and expo
 
   assert.equal((await call('chs','PUT','/api/qa/'+round.data.id,{answers:[],revision:ordered.revision})).status,403);
   const bad=[{...reloaded.data.blocks.find((b:any)=>b.kind==='question'),questionId:q.id,questionRevision:999,relatedBlockId:undefined}];
-  assert.equal((await call('fwl','PUT','/api/records/2026-11-09',{blocks:bad,revision:0})).status,400);
+  assert.equal((await call('fwl','PUT','/api/records/2026-11-09',{blocks:bad,revision:1})).status,400);
  }finally{child.kill();await once(child,'exit');db.close();fs.rmSync(dir,{recursive:true,force:true});}
 });

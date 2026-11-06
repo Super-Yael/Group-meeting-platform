@@ -40,7 +40,13 @@ export function MeetingNotebook({date,user,users,readOnly,onDateChange,download,
  const remove=(block:Block)=>{setBlocks(old=>old.filter(b=>b.id!==block.id).map(b=>b.relatedBlockId===block.id?{...b,relatedBlockId:undefined}:b));setDirty(true);if(block.questionId)setNotice('已移除提问环节；已登记的问题仍保留在问题追踪中。');};
  const save=async(publish=false)=>{
   if(!data)return;setBusy(true);setError('');setNotice('');
-  try{await put(`/api/records/${date}`,{blocks,revision:data.record?.revision||0});if(publish)await post(`/api/records/${date}/publish`,{});await load();setNotice(publish?'记录已发布入册':'会议环节与提问状态已保存');onUpdated();}
+  try{
+   const saved:{revision:number;blocks:Block[]}=await put(`/api/records/${date}`,{blocks,revision:data.record?.revision||0});
+   setBlocks(saved.blocks);setDirty(false);
+   setData(old=>old?{...old,record:{revision:saved.revision,status:'draft',updated_at:new Date().toISOString()}}:old);
+   if(publish)await post(`/api/records/${date}/publish`,{});
+   await load();setNotice(publish?'记录已发布入册':'会议环节与提问状态已保存');onUpdated();
+  }
   catch(e){setError(e instanceof Error?e.message:'保存失败');}finally{setBusy(false);}
  };
  const personSelect=(value:string,update:(value:string)=>void,label:string)=><select className="select" aria-label={label} value={value} disabled={busy} onChange={e=>update(e.target.value)}><option value="">未指定</option>{users.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}</select>;
