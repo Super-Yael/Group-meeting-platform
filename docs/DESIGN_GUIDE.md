@@ -30,7 +30,7 @@ PI 可查看日程、会议记录、提问追踪、团队文档与周期总结�
 
 **导出。** 已发布的每日记录按日期范围生成 `.docx` 和 `.pdf`；包含文献来源、问答、固定与自定义栏目。PDF 需要服务器配置中文字体 `PDF_FONT_PATH`。年度范围上限 366 天。建议在正式使用前由记录人与导师审阅排版，并对图表/图片另行完善。
 
-**实验方法知识库。** 方法页面沿用 `documents` 数据表和作者/管理员编辑权限，不增加会议关联。正文使用 Markdown，支持章节、列表、表格、代码和链接；原有纯文本仍可阅读。目录按知识分类组织，全文搜索覆盖标题、分类和正文。页面链接保留 `doc` 参数，章节生成稳定且去重的锚点，支持复制链接及浏览器后退。移动端折叠目录与章节索引；编辑时提供预览，并在离开未保存页面前提醒。PI 工作台保持只读。渲染器不执行 HTML，使用安全 URL 处理。图片使用合法的 Markdown 图片地址，不支持直接上传附件。
+**实验方法知识库。** 方法页面沿用 `documents` 数据表和作者/管理员编辑权限，不增加会议关联。正文使用 Markdown，支持章节、列表、表格、代码和链接；原有纯文本仍可阅读。目录为干/湿实验 → 技术家族 → 分类视角，首页展示各类真实方法数。每种技术家族有两个或更多独立维度；测序的代次（Sanger / NGS / 三代）、覆盖范围（WGS / WES / Panel 等）、检测对象及实验环节相互独立，同一方法可在多个分组出现。其他技术分别按实验目的、材料、培养体系、数据类型或分析任务等浏览，不以疾病限制方法。没有“实验设计”板块。全文搜索覆盖标题、简介、正文、中英文别名、关键词与分类选项。页面链接保留 `doc` 参数，章节生成稳定且去重的锚点，支持复制链接及浏览器后退。移动端折叠目录与章节索引；编辑器可维护简介、别名、关键词及多选分类维度，切换技术家族时清空不兼容维度；提供预览，并在离开未保存页面前提醒。保存采用 revision 校验，冲突或失败保留草稿。PI 工作台保持只读。渲染器不执行 HTML，使用安全 URL 处理。图片使用合法的 Markdown 图片地址，不支持直接上传附件。
 
 团队知识正文保存在受登录保护的数据库中，原始转写和私有初始化内容不提交到公开仓库。批量导入使用 `deploy/import-documents.mjs`，输入为包含 `key`、`title`、`category`、`content` 的私有 JSON 数组：
 
@@ -41,6 +41,20 @@ node deploy/import-documents.mjs --db /path/lab.sqlite --input /private/method-p
 ```
 
 导入只由现有管理员拥有页面；导入键记录于审计日志。重复运行保留已经存在或经团队修改过的页面，不覆盖原有文档。VPS 可将脚本放在 `/opt/mm-lab/server/` 下，使用已有 Node 依赖运行。
+
+### 实验目录迁移
+
+分类定义保存在 `apps/server/src/lab-taxonomy.ts`。`documents` 以可重复执行的增列迁移保存 `category_key`、`summary`、`aliases_json`、`tags_json`、`facets_json`、`archived` 和 `revision`，保留原 ID、正文与作者。`GET /api/documents/catalog` 返回登录用户可读的活动目录与分类注册表；归档页面仍可通过原 ID 阅读。编辑权限由服务器校验作者/管理员，PI 只读。
+
+结构化私有内容使用 `deploy/migrate-method-catalog.mjs`。输入包含唯一 `migrationId`、`updates`、`pages` 及可选 `archiveLegacy`；每条方法有 `key/title/categoryKey/summary/content/aliases/tags/facets/archived`，旧条目通过导入审计键或 `expectedTitle` 定位。迁移只补充分类信息和新方法，既有正文、作者与团队修改保留；归档仅退出目录、不删除原文。同一迁移重复执行不会覆盖后续编辑。
+
+```bash
+npm run build -w apps/server
+node deploy/migrate-method-catalog.mjs --db /path/lab.sqlite --input /private/catalog.json --actor fwl
+node deploy/migrate-method-catalog.mjs --db /path/lab.sqlite --input /private/catalog.json --actor fwl --apply
+```
+
+正式执行先在线备份并验证 SQLite 完整性，再在事务内迁移。VPS 可将脚本放在 `/opt/mm-lab/server/`；也可显式指定 `--server-dir`。代码回滚可继续读取原字段；需要数据回退时停止服务，从本次验证过的备份恢复，并保留回退前数据库以免丢失其间编辑。
 
 ## 4. 系统架构
 

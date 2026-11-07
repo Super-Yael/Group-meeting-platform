@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import {ensureDocumentSchema} from './lab-documents.js';
 import {ensureMeetingSchema} from './meeting-records.js';
 
 export type User = {id:string; name:string; role:'admin'|'member'|'pi'; team_group:string};
@@ -54,6 +55,7 @@ export function createDb(filename:string){
   const admin=db.prepare('SELECT password_hash FROM users WHERE id=?').get('fwl') as {password_hash:string|null};
   if(!admin.password_hash&&process.env.ADMIN_PASSWORD)db.prepare('UPDATE users SET password_hash=? WHERE id=?').run(hashPassword(process.env.ADMIN_PASSWORD),'fwl');
   ensureMeetingSchema(db);
+  ensureDocumentSchema(db);
   return db;
 }
 export function listDuties(db:Database.Database,from:string,to:string){return db.prepare(`SELECT s.*,u.name,u.team_group FROM schedules s JOIN users u ON u.id=s.user_id WHERE date BETWEEN ? AND ? ORDER BY date,CASE duty_type WHEN 'host' THEN 0 WHEN 'presenter' THEN 1 ELSE 2 END,id`).all(from,to) as Duty[];}

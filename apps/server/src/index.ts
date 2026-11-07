@@ -1,3 +1,5 @@
+import {catalogCategories} from './lab-taxonomy.js';
+import {listDocuments,getDocument,saveDocument} from './lab-documents.js';
 import express,{type Request,type Response,type NextFunction} from 'express';
 import cors from 'cors';
 import { createHash,randomBytes,timingSafeEqual } from 'node:crypto';
@@ -105,9 +107,11 @@ app.put('/api/qa/:id',wrap((req,res)=>{
  db.prepare('UPDATE qa_logs SET answer=?,answerer_id=?,answers_json=?,status=?,follow_up_date=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(answersText(db,answers),answers[0]?.speakerId||null,JSON.stringify(answers),status,status==='resolved'?null:followUpDate||null,qid);
  audit(db,u.id,'question.update',{id:qid,status});res.json({ok:true});
 }));
-app.get('/api/documents',wrap((req,res)=>{requireUser(req);const q=bodyText(req.query.q,100);res.json(db.prepare('SELECT d.*,u.name AS author_name FROM documents d JOIN users u ON u.id=d.author_id WHERE d.title LIKE ? OR d.content LIKE ? ORDER BY d.updated_at DESC').all('%'+q+'%','%'+q+'%'));}));
-app.post('/api/documents',wrap((req,res)=>{const u=requireUser(req);const title=bodyText(req.body.title,200).trim();if(!title)throw new Error('请填写标题');const r=db.prepare('INSERT INTO documents(title,category,content,author_id) VALUES(?,?,?,?)').run(title,bodyText(req.body.category,60)||'方法',bodyText(req.body.content,100000),u.id);res.json({id:r.lastInsertRowid});}));
-app.put('/api/documents/:id',wrap((req,res)=>{const u=requireUser(req),docId=id(req.params.id);const d=db.prepare('SELECT * FROM documents WHERE id=?').get(docId) as any;if(!d)throw new Error('文档不存在');if(d.author_id!==u.id&&!isAdmin(db,u.id))throw Object.assign(new Error('无权限'),{status:403});db.prepare('UPDATE documents SET title=?,category=?,content=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(bodyText(req.body.title,200),bodyText(req.body.category,60),bodyText(req.body.content,100000),docId);res.json({ok:true});}));
+app.get('/api/documents/catalog',wrap((req,res)=>{const u=requireUser(req);res.json({categories:catalogCategories,documents:listDocuments(db,u,{activeOnly:true})});}));
+app.get('/api/documents',wrap((req,res)=>{const u=requireUser(req),q=bodyText(req.query.q,100).trim().toLocaleLowerCase();const rows=listDocuments(db,u);res.json(q?rows.filter(row=>[row.title,row.content,row.summary,...row.aliases,...row.tags].join(' ').toLocaleLowerCase().includes(q)):rows);}));
+app.get('/api/documents/:id',wrap((req,res)=>{res.json(getDocument(db,requireUser(req),id(req.params.id)));}));
+app.post('/api/documents',wrap((req,res)=>{const document=saveDocument(db,requireUser(req),req.body);res.json({id:document.id,document});}));
+app.put('/api/documents/:id',wrap((req,res)=>{const document=saveDocument(db,requireUser(req),req.body,id(req.params.id));res.json({ok:true,document});}));
 app.get('/api/reviews',wrap((req,res)=>{
  const u=requireUser(req);
  const rows=db.prepare('SELECT r.*,u.name AS owner_name FROM reviews r LEFT JOIN users u ON u.id=r.owner_id ORDER BY r.period_start DESC LIMIT 50').all() as {owner_id:string|null}[];
