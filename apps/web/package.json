@@ -17,7 +17,11 @@
     "next": "^15.5.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "tailwind-merge": "^3.3.1"
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
+    "remark-parse": "^11.0.0",
+    "tailwind-merge": "^3.3.1",
+    "unified": "^11.0.5"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.12",
@@ -28,7 +32,7 @@
     "typescript": "^5.9.2"
   },
   "optionalDependencies": {
-    "lightningcss-linux-x64-gnu": "1.33.0",
-    "@tailwindcss/oxide-linux-x64-gnu": "4.3.4"
+    "@tailwindcss/oxide-linux-x64-gnu": "4.3.4",
+    "lightningcss-linux-x64-gnu": "1.33.0"
   }
 }
