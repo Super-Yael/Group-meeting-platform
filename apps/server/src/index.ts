@@ -1,5 +1,3 @@
-import {catalogCategories} from './lab-taxonomy.js';
-import {listDocuments,getDocument,saveDocument} from './lab-documents.js';
 import express,{type Request,type Response,type NextFunction} from 'express';
 import cors from 'cors';
 import { createHash,randomBytes,timingSafeEqual } from 'node:crypto';
@@ -107,11 +105,11 @@ app.put('/api/qa/:id',wrap((req,res)=>{
  db.prepare('UPDATE qa_logs SET answer=?,answerer_id=?,answers_json=?,status=?,follow_up_date=?,revision=revision+1,updated_at=CURRENT_TIMESTAMP WHERE id=?').run(answersText(db,answers),answers[0]?.speakerId||null,JSON.stringify(answers),status,status==='resolved'?null:followUpDate||null,qid);
  audit(db,u.id,'question.update',{id:qid,status});res.json({ok:true});
 }));
-app.get('/api/documents/catalog',wrap((req,res)=>{const u=requireUser(req);res.json({categories:catalogCategories,documents:listDocuments(db,u,{activeOnly:true})});}));
-app.get('/api/documents',wrap((req,res)=>{const u=requireUser(req),q=bodyText(req.query.q,100).trim().toLocaleLowerCase();const rows=listDocuments(db,u);res.json(q?rows.filter(row=>[row.title,row.content,row.summary,...row.aliases,...row.tags].join(' ').toLocaleLowerCase().includes(q)):rows);}));
-app.get('/api/documents/:id',wrap((req,res)=>{res.json(getDocument(db,requireUser(req),id(req.params.id)));}));
-app.post('/api/documents',wrap((req,res)=>{const document=saveDocument(db,requireUser(req),req.body);res.json({id:document.id,document});}));
-app.put('/api/documents/:id',wrap((req,res)=>{const document=saveDocument(db,requireUser(req),req.body,id(req.params.id));res.json({ok:true,document});}));
+// The private Git repository is now the only live knowledge source. Retain the old DB
+// solely as a migration snapshot; old clients must not read or edit a stale copy.
+app.all(/^\/api\/documents(?:\/.*)?$/,wrap((req,res)=>{
+ requireUser(req);res.status(410).json({error:'团队文档已迁移至 Git 托管，请刷新页面后从团队文档入口查阅',location:'/?view=documents'});
+}));
 app.get('/api/reviews',wrap((req,res)=>{
  const u=requireUser(req);
  const rows=db.prepare('SELECT r.*,u.name AS owner_name FROM reviews r LEFT JOIN users u ON u.id=r.owner_id ORDER BY r.period_start DESC LIMIT 50').all() as {owner_id:string|null}[];

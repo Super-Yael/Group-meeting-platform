@@ -9,7 +9,7 @@
     "dev:web": "npm run dev -w apps/web",
     "dev:server": "npm run dev -w apps/server",
     "build": "npm run build -w apps/web && npm run build -w apps/server",
-    "test": "npm run test -w apps/server && npm exec -w apps/server -- tsx --test ../../tests/api-proxy.test.ts ../../tests/notebook-save.test.ts ../../tests/method-docs.test.ts"
+    "test": "npm run test -w apps/server && npm exec -w apps/server -- tsx --test ../../tests/api-proxy.test.ts ../../tests/knowledge-edge.test.ts ../../tests/knowledge-build.test.ts ../../tests/notebook-save.test.ts ../../tests/method-docs.test.ts"
   },
   "allowScripts": {
     "better-sqlite3@12.11.1": true,

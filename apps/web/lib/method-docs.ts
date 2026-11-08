@@ -5,8 +5,8 @@ import remarkGfm from 'remark-gfm';
 export type FacetValue={key:string;label:string;aliases?:string[]};
 export type CatalogAxis={key:string;label:string;description:string;values:FacetValue[]};
 export type CatalogCategory={key:string;name:string;parentKey:string|null;description:string;axes:CatalogAxis[]};
-export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number};
-export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[]};
+export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number;collection?:string;order?:number;body_url?:string;source_path?:string;search_text?:string};
+export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[];version?:string;policyId?:number;chapterCount?:number;sectionCount?:number};
 export type DocumentHeading={id:string;text:string;depth:number;offset:number};
 type MarkdownNode={type:string;value?:string;alt?:string;depth?:number;children?:MarkdownNode[];position?:{start:{offset?:number}}};
 
@@ -42,7 +42,7 @@ export function filterDocuments(documents:MethodDocument[],query:string,categori
   const category=categories.find(c=>c.key===doc.category_key);
   const facets=category?.axes.flatMap(axis=>axis.values.filter(v=>doc.facets?.[axis.key]?.includes(v.key)).flatMap(v=>[v.label,...v.aliases||[]]))||[];
   const aliases=(doc.aliases||[]).map(normalize),title=normalize(doc.title);
-  const text=normalize([doc.title,doc.category_path||doc.category,doc.summary||'',doc.content,...doc.aliases||[],...doc.tags||[],...facets].join(' '));
+  const text=normalize([doc.title,doc.category_path||doc.category,doc.summary||'',doc.content,doc.search_text||'',...doc.aliases||[],...doc.tags||[],...facets].join(' '));
   const matches=terms.every(term=>text.includes(term));
   const score=terms.reduce((total,term)=>total+(title===term?100:title.includes(term)?50:aliases.includes(term)?90:aliases.some(alias=>alias.includes(term))?40:1),0);
   return {doc,matches,score};

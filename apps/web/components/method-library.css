@@ -172,3 +172,32 @@
 .method-domain-jumps{display:none}
 .method-domain-index>section{scroll-margin-top:80px}
 @media(max-width:760px){.method-domain-jumps{display:flex;gap:10px;margin:0 0 25px}.method-domain-jumps a{display:flex;align-items:center;justify-content:space-between;gap:30px;flex:1;min-height:44px;padding:9px 12px;background:var(--soft);border-radius:5px;font-size:14px}.method-domain-jumps span{font-size:12px;color:var(--muted)}}
+/* Git-backed handbook: chapters and policies, with bodies loaded only on demand. */
+.method-book-label{display:block;padding:6px 9px;margin:18px 0 7px;font-size:12px;font-weight:600;color:var(--ink)}
+.method-book-section{margin:2px 0}
+.method-book-section>summary{display:flex;align-items:center;gap:6px;padding:4px 7px;list-style:none;cursor:pointer}
+.method-book-section>summary>a{font-size:13px;line-height:1.6;color:var(--muted);flex:1;padding:4px 2px}
+.method-book-section>summary>a.active{color:var(--ink);font-weight:600}
+.method-book-section>summary>span{font-size:11px;color:var(--muted)}
+.method-book-section:not([open])>summary>svg{transform:rotate(-90deg)}
+.method-book-section .method-tree-methods{margin:3px 0 12px 9px;padding-left:8px;border-left:1px solid var(--line)}
+.method-policy-nav{display:flex;gap:8px;align-items:center;padding:11px 8px;margin-top:18px;font-size:12px;color:var(--muted)}
+.method-policy-nav.active{color:var(--ink);font-weight:500}
+.method-book-intro{display:flex;justify-content:space-between;gap:24px;align-items:center;margin:0 0 24px;padding:18px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.method-book-intro p{font-size:14px;line-height:1.8;color:var(--muted);margin:0}
+.method-book-intro>a{display:flex;align-items:center;gap:12px;flex:none;font-size:14px;color:var(--accent)}
+.method-chapter-index{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 32px}
+.method-chapter-index>a{display:flex;align-items:center;gap:12px;padding:22px 0;border-bottom:1px solid var(--line)}
+.method-chapter-index>a>div{flex:1;min-width:0}
+.method-chapter-index h2{font-size:17px;font-weight:500;line-height:1.6;margin:3px 0 7px}
+.method-chapter-index p{font-size:12px;color:var(--muted);line-height:1.8;margin:0}
+.method-chapter-index span{font-size:12px;white-space:nowrap;color:var(--muted)}
+.method-chapter-index>a:hover h2{color:var(--accent)}
+.method-chapter-index svg{flex:none;color:var(--muted)}
+.method-library-footer{display:flex;gap:12px 24px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:20px;margin-top:40px;font-size:12px;line-height:1.8;color:var(--muted)}
+.method-library-footer a{color:var(--accent)}
+.method-page-actions>a{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;min-height:32px}
+@media(max-width:760px){.method-chapter-index{grid-template-columns:1fr}.method-book-intro{display:block;padding:15px 0}.method-book-intro>a{width:max-content;min-height:44px;margin-top:10px}.method-book-section>summary>a{font-size:14px;min-height:38px;display:flex;align-items:center}.method-policy-nav{min-height:44px;font-size:13px}.method-chapter-index>a{padding:19px 0}.method-library-footer{display:block}.method-library-footer a{display:block;min-height:44px;padding-top:8px}}
+
+.method-book-section:not([open])>.method-tree-methods{display:none}
+.method-chapter-index p{font-size:13px}.method-book-section>summary>span{font-size:12px}.method-book-section .method-tree-methods>a{font-size:13px}

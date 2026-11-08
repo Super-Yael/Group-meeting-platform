@@ -8,9 +8,9 @@
 
 ## 2. 信息架构与权限
 
-左侧：概览、会议日程、会议记录、团队文档；底部“我的账户”。移动端折叠为抽屉，保留全部入口。概览回答“今天谁讲、谁记、还有什么待处理”；日程回答“哪天有空位与谁需要互换”；记录页回答“今天形成了什么证据与下一步”；文档页以方法手册组织团队知识：分类目录、长文正文、本页章节索引及上一页/下一页；账户页管理个人密码、主题与管理员设置。
+左侧：概览、会议日程、会议记录、团队文档；底部“我的账户”。移动端折叠为抽屉，保留全部入口。概览回答“今天谁讲、谁记、还有什么待处理”；日程回答“哪天有空位与谁需要互换”；记录页回答“今天形成了什么证据与下一步”；文档页以 Biostar 中文手册组织团队知识：原文章节目录、全文正文、本页索引及前后篇导航；账户页管理个人密码、主题与管理员设置。
 
-管理员可以生成/增删排班、配置会议号并生成成员一次性邀请码、编辑任意日记录。成员可以修改自己的汇报日期，记录人可向另一日记录人发起互换，目标记录人同意/拒绝。每日记录、发布和出席名单由当天记录人或管理员管理；其他成员以只读方式查看每日记录，仍可登记自己的提问。记录人和管理员可以代录现场提问。文献仅允许当日汇报人、当日记录人或管理员添加；汇报人只能为自己添加，当日记录人可为当日汇报人代录。团队文档创建者及管理员可修改文档。周期总结仅负责人或管理员可修改；成员新建时负责人为自己，只有管理员可以指定或变更负责人。桌面和手机均向管理员提供主持、汇报、记录任务的移除入口。
+管理员可以生成/增删排班、配置会议号并生成成员一次性邀请码、编辑任意日记录。成员可以修改自己的汇报日期，记录人可向另一日记录人发起互换，目标记录人同意/拒绝。每日记录、发布和出席名单由当天记录人或管理员管理；其他成员以只读方式查看每日记录，仍可登记自己的提问。记录人和管理员可以代录现场提问。文献仅允许当日汇报人、当日记录人或管理员添加；汇报人只能为自己添加，当日记录人可为当日汇报人代录。团队文档通过私有 Git 仓库修订，站内提供管理员源文件入口。周期总结仅负责人或管理员可修改；成员新建时负责人为自己，只有管理员可以指定或变更负责人。桌面和手机均向管理员提供主持、汇报、记录任务的移除入口。
 
 PI 可查看日程、会议记录、提问追踪、团队文档与周期总结，并导出已发布记录。PI 不参与日常任务排班和成员必问打卡；所有团队内容写入接口统一返回 403，个人密码与显示偏好可自行修改。管理员可在现有“我的账户”页面为 PI 生成一次性邀请码；专门的管理后台留待后续迭代。既有数据库会事务迁移账号角色约束，保留密码、会话和外键关联。
 
@@ -30,31 +30,25 @@ PI 可查看日程、会议记录、提问追踪、团队文档与周期总结�
 
 **导出。** 已发布的每日记录按日期范围生成 `.docx` 和 `.pdf`；包含文献来源、问答、固定与自定义栏目。PDF 需要服务器配置中文字体 `PDF_FONT_PATH`。年度范围上限 366 天。建议在正式使用前由记录人与导师审阅排版，并对图表/图片另行完善。
 
-**实验方法知识库。** 方法页面沿用 `documents` 数据表和作者/管理员编辑权限，不增加会议关联。正文使用 Markdown，支持章节、列表、表格、代码和链接；原有纯文本仍可阅读。目录为干/湿实验 → 技术家族 → 分类视角，首页展示各类真实方法数。每种技术家族有两个或更多独立维度；测序的代次（Sanger / NGS / 三代）、覆盖范围（WGS / WES / Panel 等）、检测对象及实验环节相互独立，同一方法可在多个分组出现。其他技术分别按实验目的、材料、培养体系、数据类型或分析任务等浏览，不以疾病限制方法。没有“实验设计”板块。全文搜索覆盖标题、简介、正文、中英文别名、关键词与分类选项。页面链接保留 `doc` 参数，章节生成稳定且去重的锚点，支持复制链接及浏览器后退。移动端折叠目录与章节索引；编辑器可维护简介、别名、关键词及多选分类维度，切换技术家族时清空不兼容维度；提供预览，并在离开未保存页面前提醒。保存采用 revision 校验，冲突或失败保留草稿。PI 工作台保持只读。渲染器不执行 HTML，使用安全 URL 处理。图片使用合法的 Markdown 图片地址，不支持直接上传附件。
+**团队文档。** 文档正文改由独立私有仓库 `Super-Yael/team_doc` 管理，以所提供 Biostar Handbook 的 28 章、146 篇中文正文为内容源。原有方法条目不进入新目录，历史数据库和迁移快照仅用于回滚。文档没有会议关联。站内按原文章节阅读，支持全文搜索、图片、表格、代码、章节锚点及前后篇导航。正文和搜索索引按需读取；中文译文的代码、数据样例、原图及参考链接保留。署名不在各页重复增加，来源、权利、可用性与保密限制集中列在末尾声明。
 
-团队知识正文保存在受登录保护的数据库中，原始转写和私有初始化内容不提交到公开仓库。批量导入使用 `deploy/import-documents.mjs`，输入为包含 `key`、`title`、`category`、`content` 的私有 JSON 数组：
+`team_doc` 保存 `handbooks/biostar/zh`、对应英文核对材料、原图，以及 `governance` 下的保密声明与原始 PDF。构建只发布中文正文和必要资源，不发布账户页、登录页、原始抓取 HTML、英文镜像、数据库或 `.local` 文件。当前 PDF 文件名含“草案”，正文为《保密协议（试行）》且签署栏为空，站内展示不等于成员已签署。
 
-```bash
-node deploy/import-documents.mjs --db /path/lab.sqlite --input /private/method-pages.json --actor fwl
-# 检查预览后执行；先在线备份并验证完整性，再在事务内新增
-node deploy/import-documents.mjs --db /path/lab.sqlite --input /private/method-pages.json --actor fwl --apply
-```
+**两仓库自动构建。** Pages 原生连接网站源码仓库，构建命令为 `npm run build`，根目录 `apps/web`，输出 `out`。Next.js 静态导出后执行 `scripts/build-knowledge.mjs`，使用只读 SSH deploy key 通过 GitHub SSH 443 端口拉取私有 `team_doc/main`，校验完整翻译状态，生成目录、逐篇正文、全文索引及图片/PDF 资源。SSH 主机密钥取自 GitHub 官方 `/meta` 并固定在源码；私钥使用临时 0600 文件，构建结束清理。网站源码 push 使用原生 Pages 自动部署；文档 push 由私有仓库 GitHub Actions 调用 main/pi 两个 Deploy Hook，两者都保持现有域名和登录入口。
 
-导入只由现有管理员拥有页面；导入键记录于审计日志。重复运行保留已经存在或经团队修改过的页面，不覆盖原有文档。VPS 可将脚本放在 `/opt/mm-lab/server/` 下，使用已有 Node 依赖运行。
+**文档访问控制。** `/knowledge/*` 的所有目录、索引、正文、图片和 PDF 均经过 Pages middleware。VPS 登录会话验证成功后，Pages 为 `/knowledge` 签发短时、HttpOnly、SameSite=Lax 的 HMAC 访问凭证，绑定当前站点、角色及现有 `mm_session`。凭证有效时在边缘验证，不向 VPS 传输文档正文；过期或直接打开受保护链接时，仅通过小体积 bootstrap 请求续期，随后从 Cloudflare ASSETS 返回资源。退出登录清除凭证，缺少登录会话仍拒绝访问。管理员可通过私有 GitHub 源文件入口修订，站内不再向 SQLite 保存文档；PI 和普通成员保留阅读能力。
 
-### 实验目录迁移
+构建对所有文档资源使用 AES-256-GCM 加密，AAD 绑定资源路径；`out/knowledge` 只有 `.bin` 密文，浏览器脚本不含正文或解密密钥。边缘先鉴权再解密，返回 `private, no-store` 和 `nosniff`，PDF 支持 Range/HEAD。即使误直接读取构建产物，也只能取得密文。生产与预览均配置 `fail_open=false`，不得在 Functions 配额耗尽时回退公开静态文件。会话密钥与数据密钥均作为 Pages secret 保存。
 
-分类定义保存在 `apps/server/src/lab-taxonomy.ts`。`documents` 以可重复执行的增列迁移保存 `category_key`、`summary`、`aliases_json`、`tags_json`、`facets_json`、`archived` 和 `revision`，保留原 ID、正文与作者。`GET /api/documents/catalog` 返回登录用户可读的活动目录与分类注册表；归档页面仍可通过原 ID 阅读。编辑权限由服务器校验作者/管理员，PI 只读。
+需要的 Pages secrets：
 
-结构化私有内容使用 `deploy/migrate-method-catalog.mjs`。输入包含唯一 `migrationId`、`updates`、`pages` 及可选 `archiveLegacy`；每条方法有 `key/title/categoryKey/summary/content/aliases/tags/facets/archived`，旧条目通过导入审计键或 `expectedTitle` 定位。迁移只补充分类信息和新方法，既有正文、作者与团队修改保留；归档仅退出目录、不删除原文。同一迁移重复执行不会覆盖后续编辑。
+- `DOCS_DEPLOY_KEY`：仅允许读取 `team_doc` 的部署私钥。
+- `DOCS_DATA_KEY`：32 字节、base64 编码的数据加密密钥。
+- `DOCS_ACCESS_SECRET`：访问凭证签名密钥。
 
-```bash
-npm run build -w apps/server
-node deploy/migrate-method-catalog.mjs --db /path/lab.sqlite --input /private/catalog.json --actor fwl
-node deploy/migrate-method-catalog.mjs --db /path/lab.sqlite --input /private/catalog.json --actor fwl --apply
-```
+本地构建显式设置 `TEAM_DOC_DIR` 指向私有 checkout，并通过环境注入数据密钥；不得提交密钥或明文构建产物。私有仓库的 Actions secrets 为 `CF_MAIN_DEPLOY_HOOK` 与 `CF_PI_DEPLOY_HOOK`，Hook URL 按凭据管理。
 
-正式执行先在线备份并验证 SQLite 完整性，再在事务内迁移。VPS 可将脚本放在 `/opt/mm-lab/server/`；也可显式指定 `--server-dir`。代码回滚可继续读取原字段；需要数据回退时停止服务，从本次验证过的备份恢复，并保留回退前数据库以免丢失其间编辑。
+**数据库退役接口。** `/api/documents` 及其子路径对已登录旧客户端返回 410，提示刷新至 Git 托管版本；未登录仍返回 401，PI 写入仍遵守全局 403。运行中的文档读取与修改不再使用 `documents` 表。迁移前数据库及原始内容保留为历史恢复依据，不公开发布。
 
 ## 4. 系统架构
 
@@ -74,7 +68,7 @@ SQLite 开启 WAL、外键和 `busy_timeout=5000`。对 6–20 人的团队足�
 
 ## 5. 数据模型
 
-`users`：身份、分组、密码哈希（scrypt 加盐）；`sessions`：14 天登录会话，只存 token 哈希；`invites`：7 天一次性邀请码哈希，成员凭姓名拼音首字母账号激活并自行设置密码；`settings`：会议号和链接；`schedules`：日期、成员、任务，唯一约束防重复与双记录人；`swap_requests`：待同意、已同意、拒绝、失效等状态；`attendance`：每天出席名单；`daily_records`：会议环节 JSON、版本号、草稿/发布、兼容旧栏目；`papers`：文献来源；`qa_logs`：提问、追踪状态及有序的 answers_json 回答列表（兼容旧单条回答）；`reviews`：周/半月总结；`documents`：知识库；`audit_log`：关键操作。
+`users`：身份、分组、密码哈希（scrypt 加盐）；`sessions`：14 天登录会话，只存 token 哈希；`invites`：7 天一次性邀请码哈希，成员凭姓名拼音首字母账号激活并自行设置密码；`settings`：会议号和链接；`schedules`：日期、成员、任务，唯一约束防重复与双记录人；`swap_requests`：待同意、已同意、拒绝、失效等状态；`attendance`：每天出席名单；`daily_records`：会议环节 JSON、版本号、草稿/发布、兼容旧栏目；`papers`：文献来源；`qa_logs`：提问、追踪状态及有序的 answers_json 回答列表（兼容旧单条回答）；`reviews`：周/半月总结；`documents`：历史文档迁移快照（运行中的知识库使用私有 Git）；`audit_log`：关键操作。
 
 初始版本以 SQL `CREATE TABLE IF NOT EXISTS` 建表，后续增加字段须提供显式迁移脚本和回滚方案。SQLite 文件和 WAL/SHM 文件必须同目录备份。仓库中的 `deploy/backup.mjs` 使用 SQLite 在线备份 API 并运行完整性检查；服务器计时器每天北京时间约 04:00 执行，保留最近 14 份本地备份。配置 `RCLONE_TARGET` 后可同步到异地存储；当前 OneDrive 尚未授权，异地同步还未启用。至少每月演练一次恢复。
 

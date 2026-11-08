@@ -1,7 +1,8 @@
+import {issueKnowledgeCookie,clearKnowledgeCookie,type KnowledgeEnv} from './knowledge-edge';
 const upstreamOrigin='https://lab-api.yyael.com';
 
-// Pages only forwards requests; authentication, application logic and SQLite stay on 4C20G.
-export async function proxyApiRequest(request:Request,send:typeof fetch=fetch):Promise<Response>{
+// Sessions and application data stay on 4C20G; Pages issues short-lived proofs for private Git assets.
+export async function proxyApiRequest(request:Request,send:typeof fetch=fetch,env:KnowledgeEnv={}):Promise<Response>{
  const incoming=new URL(request.url);
  if(!incoming.pathname.startsWith('/api/'))return new Response('Not found',{status:404});
  const origin=request.headers.get('origin');
@@ -26,6 +27,11 @@ export async function proxyApiRequest(request:Request,send:typeof fetch=fetch):P
   }
   if(response.status>=300&&response.status<400&&resultHeaders.has('Location')){
    return Response.json({error:'API 服务返回了意外跳转，请稍后重试'},{status:502,headers:{'Cache-Control':'no-store'}});
+  }
+  if(incoming.pathname==='/api/logout'&&response.ok)resultHeaders.append('Set-Cookie',clearKnowledgeCookie(request));
+  if(incoming.pathname==='/api/bootstrap'&&response.ok&&env.DOCS_ACCESS_SECRET){
+   const body=await response.clone().json() as {user?:{id:string;role:string}};
+   if(body.user){const cookie=await issueKnowledgeCookie(request,body.user,env.DOCS_ACCESS_SECRET);if(cookie)resultHeaders.append('Set-Cookie',cookie);}
   }
   return new Response(response.body,{status:response.status,statusText:response.statusText,headers:resultHeaders});
  }catch{
