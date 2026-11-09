@@ -51,3 +51,8 @@ test('a direct protected PDF renews an expired edge proof through authenticated 
  const responses=await Promise.all([knowledgeGateway(expired,env,login),knowledgeGateway(expired,env,login)]);assert.equal(checks,1);for(const response of responses){assert.equal(response.status,200);assert.equal(await response.text(),'%PDF-authorized');assert.match(response.headers.get('Set-Cookie')!,/^mm_docs=/);}
  const denied=await knowledgeGateway(new Request(origin+path,{headers:{Cookie:'mm_session=invalid-test'}}),env,(async()=>Response.json({error:'Expired'},{status:401})) as typeof fetch);assert.equal(denied.status,401);
 });
+test('SVG figures require authentication and are sandboxed when opened directly',async()=>{
+ const path='/knowledge/assets/biostar/sample.svg',svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),env={DOCS_ACCESS_SECRET:secret,DOCS_DATA_KEY:dataKey,ASSETS:{fetch:async()=>new Response(encrypted(path,svg))}};
+ assert.equal((await serveKnowledge(new Request(origin+path),env)).status,401);
+ const res=await serveKnowledge(await request(path),env);assert.equal(res.status,200);assert.equal(res.headers.get('Content-Type'),'image/svg+xml');assert.match(res.headers.get('Content-Security-Policy')!,/sandbox.*default-src 'none'/);assert.deepEqual(Buffer.from(await res.arrayBuffer()),svg);
+});

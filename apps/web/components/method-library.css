@@ -201,3 +201,13 @@
 
 .method-book-section:not([open])>.method-tree-methods{display:none}
 .method-chapter-index p{font-size:13px}.method-book-section>summary>span{font-size:12px}.method-book-section .method-tree-methods>a{font-size:13px}
+/* Document overview exposes its real subject areas directly. */
+.method-index>.method-domain-index{grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.method-index .method-domain-heading h2{font-size:18px}
+.method-index .method-category-list>a{padding:12px 0;gap:10px}
+.method-index .method-category-list h3{font-size:14px}
+@media(max-width:1100px){.method-index>.method-domain-index{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:760px){.method-index>.method-domain-index{grid-template-columns:1fr;gap:30px}.method-index .method-category-list>a{padding:13px 0;min-height:48px}}
+@media(max-width:760px){.method-domain-jumps a{gap:8px;padding:9px 10px;min-width:0}.method-domain-jumps span{font-size:11px}}
+.method-prose img.method-inline-emoji{display:inline-block;width:1.2em;height:1.2em;vertical-align:-.2em}
+@media(max-width:760px){.method-domain-jumps a{justify-content:center;white-space:nowrap;font-size:13px;padding:9px 8px}.method-domain-jumps span{display:none}}

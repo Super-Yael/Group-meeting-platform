@@ -23,14 +23,14 @@ export async function verifyKnowledgeRequest(request:Request,secret:string,now=M
 }
 const privateHeaders={'Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Vary':'Cookie'};
 function failure(message:string,status:number){return Response.json({error:message},{status,headers:privateHeaders});}
-const mime:Record<string,string>={json:'application/json; charset=utf-8',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',pdf:'application/pdf'};
+const mime:Record<string,string>={json:'application/json; charset=utf-8',png:'image/png',jpg:'image/jpeg',jpeg:'image/jpeg',gif:'image/gif',svg:'image/svg+xml',pdf:'application/pdf'};
 export async function serveKnowledge(request:Request,env:KnowledgeEnv):Promise<Response>{
  if(!env.DOCS_ACCESS_SECRET||!env.DOCS_DATA_KEY||!env.ASSETS)return failure('文档服务尚未完成配置',503);
  if(!await verifyKnowledgeRequest(request,env.DOCS_ACCESS_SECRET))return failure('请登录后查阅团队文档',401);
  if(!['GET','HEAD'].includes(request.method))return failure('不支持此操作',405);
  const url=new URL(request.url);let pathname:string;
  try{pathname=decodeURIComponent(url.pathname);}catch{return failure('资源路径无效',400);}
- if(!pathname.startsWith('/knowledge/')||pathname.includes('\\')||pathname.includes('%')||pathname.split('/').some(s=>s==='..'||s==='.')||!/^\/knowledge\/(?:catalog\.json|search\.json|docs\/\d+\.json|assets\/(?:biostar\/[a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif)|governance\/confidentiality-agreement\.pdf))$/.test(pathname))return failure('资源不存在',404);
+ if(!pathname.startsWith('/knowledge/')||pathname.includes('\\')||pathname.includes('%')||pathname.split('/').some(s=>s==='..'||s==='.')||!/^\/knowledge\/(?:catalog\.json|search\.json|docs\/\d+\.json|assets\/(?:biostar\/[a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif|svg)|governance\/confidentiality-agreement\.pdf))$/.test(pathname))return failure('资源不存在',404);
  try{
   const keyBytes=unbase64(env.DOCS_DATA_KEY);if(keyBytes.length!==32)return failure('文档服务密钥配置无效',503);
   url.pathname=pathname+'.bin';url.search='';
@@ -40,6 +40,7 @@ export async function serveKnowledge(request:Request,env:KnowledgeEnv):Promise<R
   const key=await crypto.subtle.importKey('raw',keyBytes,'AES-GCM',false,['decrypt']);
   const clear=new Uint8Array(await crypto.subtle.decrypt({name:'AES-GCM',iv:packed.slice(4,16),additionalData:encoder.encode(pathname)},key,packed.slice(16)));
   const headers=new Headers(privateHeaders);headers.set('Content-Type',mime[pathname.split('.').at(-1)||'']||'application/octet-stream');headers.set('Accept-Ranges','bytes');
+  if(pathname.endsWith('.svg'))headers.set('Content-Security-Policy',"sandbox; default-src 'none'");
   if(pathname.endsWith('.pdf'))headers.set('Content-Disposition','inline; filename="confidentiality-agreement.pdf"');
   let start=0,end=clear.length-1,status=200;const range=request.headers.get('range');
   if(range){

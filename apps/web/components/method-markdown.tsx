@@ -16,6 +16,6 @@ export const MethodMarkdown=memo(function MethodMarkdown({content,documentId}:{c
   h6:({node,children})=><h6 id={headings.find(h=>h.offset===node?.position?.start.offset)?.id}>{children}</h6>,
   table:({children})=><div className="method-table-scroll" tabIndex={0} aria-label="可横向滚动的数据表"><table>{children}</table></div>,
   a:({href,children})=><a href={href} {...(/^https?:\/\//i.test(href||'')?{target:'_blank',rel:'noopener noreferrer'}:{})}>{children}</a>,
-  img:({src,alt})=><img src={src} alt={alt||''} loading="lazy"/>
+  img:({src,alt})=><img src={src} alt={alt||''} className={alt&&Array.from(alt).length<=4&&/\p{Extended_Pictographic}/u.test(alt)?'method-inline-emoji':undefined} loading="lazy"/>
  }}>{content}</Markdown></div>;
 });

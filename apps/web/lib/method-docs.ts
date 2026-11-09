@@ -5,8 +5,8 @@ import remarkGfm from 'remark-gfm';
 export type FacetValue={key:string;label:string;aliases?:string[]};
 export type CatalogAxis={key:string;label:string;description:string;values:FacetValue[]};
 export type CatalogCategory={key:string;name:string;parentKey:string|null;description:string;axes:CatalogAxis[]};
-export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number;collection?:string;order?:number;body_url?:string;source_path?:string;search_text?:string};
-export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[];version?:string;policyId?:number;chapterCount?:number;sectionCount?:number};
+export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number;collection?:string;book_key?:string;redirect_to?:number;order?:number;body_url?:string;source_path?:string;search_text?:string};
+export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[];version?:string;policyId?:number;chapterCount?:number;sectionCount?:number;bookCount?:number;methodCount?:number};
 export type DocumentHeading={id:string;text:string;depth:number;offset:number};
 type MarkdownNode={type:string;value?:string;alt?:string;depth?:number;children?:MarkdownNode[];position?:{start:{offset?:number}}};
 
