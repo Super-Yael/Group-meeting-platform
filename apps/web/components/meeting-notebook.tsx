@@ -1,7 +1,7 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
-import {ArrowUp,ArrowDown,Plus,Trash2,Download} from 'lucide-react';
-import {api,post,put} from '@/lib/api';
+import {ArrowUp,ArrowDown,ChevronLeft,ChevronRight,Plus,Trash2,Download} from 'lucide-react';
+import {addDays,api,post,put} from '@/lib/api';
 import {Button} from '@/components/ui/button';
 import {Modal} from '@/components/ui/dialog';
 import {QuestionAnswers,type QuestionAnswer} from '@/components/question-answers';
@@ -80,8 +80,8 @@ export function MeetingNotebook({date,user,users,readOnly,onDateChange,download,
   return String(value??'未填写');
  };
  return <section className="meeting-notebook">
-  <h1 className="page-title">{readOnly?'会议档案':'会议记录'}</h1><p className="page-desc">按现场顺序记录分享、提问、分析、老师总结与发言。每个环节都可自由扩展。</p>
-  <div className="notebook-toolbar"><div className="row-actions"><input aria-label="记录日期" type="date" className="input notebook-date" value={date} onChange={e=>changeDate(e.target.value)}/><span className="badge gray">{data?.record?.status==='published'?'已发布':'草稿'}</span><span className="small muted">记录：{data?.duties.find(d=>d.duty_type==='recorder')?.name||'待安排'}</span></div><div className="row-actions"><Button onClick={()=>download('docx',date,date)}><Download size={15}/>Word</Button><Button onClick={()=>download('pdf',date,date)}>PDF</Button></div></div>
+  <h1 className="page-title">{readOnly?'会议档案':'会议记录'}</h1>
+  <div className="notebook-toolbar"><div className="row-actions"><div className="notebook-date-nav"><Button aria-label="前一天" title="前一天" disabled={busy} onClick={()=>changeDate(addDays(date,-1))}><ChevronLeft size={16}/></Button><input aria-label="记录日期" type="date" className="input notebook-date" value={date} onChange={e=>changeDate(e.target.value)}/><Button aria-label="后一天" title="后一天" disabled={busy} onClick={()=>changeDate(addDays(date,1))}><ChevronRight size={16}/></Button></div><span className="badge gray">{data?.record?.status==='published'?'已发布':'草稿'}</span><span className="small muted">记录：{data?.duties.find(d=>d.duty_type==='recorder')?.name||'待安排'}</span></div><div className="row-actions"><Button onClick={()=>download('docx',date,date)}><Download size={15}/>Word</Button><Button onClick={()=>download('pdf',date,date)}>PDF</Button></div></div>
   {error&&<div role="alert" className="notice error">{error}</div>}{notice&&<div role="status" className="notice">{notice}</div>}
   {!!conflicts.length&&<div className="card pad"><p>只需选择发生冲突的内容，其他修改会自动合并。</p>{conflicts.map((conflict,i)=><details key={i}><summary>{conflict.label}</summary><p className="small muted">本页内容</p><div className="doc-content">{conflictText(conflict.local)}</div><p className="small muted">服务器内容</p><div className="doc-content">{conflictText(conflict.remote)}</div></details>)}<div className="row-actions"><Button disabled={busy} onClick={()=>void save(publishIntent.current,'local')}>冲突处使用本页内容</Button><Button disabled={busy} onClick={()=>void save(publishIntent.current,'remote')}>冲突处使用服务器内容</Button></div></div>}
   {loading?<p role="status">正在读取会议记录…</p>:!data?<Button onClick={()=>void load()}>重新载入</Button>:<>
