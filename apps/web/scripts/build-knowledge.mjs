@@ -36,7 +36,7 @@ export async function buildKnowledge({contentDir=process.env.TEAM_DOC_DIR,outDir
    const bookKey='bio/'+info.key,folders=manifest.sections||[...new Set(manifest.chapters.map(p=>p.section))].map((key,index)=>({key,name:sectionNames[index]||key}));
    categories.push({key:bookKey,name:info.title,parentKey:'bio',description:'按原文目录阅读。',axes:[]});
    folders.forEach(folder=>categories.push({key:bookKey+'/'+folder.key,name:folder.name,parentKey:bookKey,description:'',axes:[]}));
-   const media=new Map();for(const name of fs.readdirSync(path.join(book,'assets'))){const ext=path.extname(name).toLowerCase();if(!['.png','.jpg','.jpeg','.gif','.svg'].includes(ext))continue;media.set(name,addAsset(fs.readFileSync(path.join(book,'assets',name)),ext));}assetsByBook.set(info.key,media);
+   const media=new Map(),assetDir=path.join(book,'assets');for(const name of fs.existsSync(assetDir)?fs.readdirSync(assetDir):[]){const ext=path.extname(name).toLowerCase();if(!['.png','.jpg','.jpeg','.gif','.svg'].includes(ext))continue;media.set(name,addAsset(fs.readFileSync(path.join(assetDir,name)),ext));}assetsByBook.set(info.key,media);
    const pages=[...manifest.chapters].sort((a,b)=>(a.order??a.id)-(b.order??b.id));
    for(const [order,page] of pages.entries()){
     let content=fs.readFileSync(path.join(book,'zh',page.key),'utf8');const english=fs.readFileSync(path.join(book,'en',page.key),'utf8');
