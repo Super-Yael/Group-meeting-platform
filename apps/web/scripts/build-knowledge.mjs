@@ -27,7 +27,7 @@ export async function buildKnowledge({contentDir=process.env.TEAM_DOC_DIR,outDir
   }
   contentDir=path.resolve(contentDir);const revision=fs.existsSync(path.join(contentDir,'.git'))?execFileSync('git',['-C',contentDir,'rev-parse','HEAD'],{encoding:'utf8'}).trim():'local-review';
   const root=path.join(contentDir,'handbooks'),more=path.join(root,'books.json');
-  const books=[{key:'biostar',title:'Biostar 中文手册'},...(fs.existsSync(more)?JSON.parse(fs.readFileSync(more,'utf8')).books:[])];
+  const books=[{key:'biostar',title:'生物信息学手册'},...(fs.existsSync(more)?JSON.parse(fs.readFileSync(more,'utf8')).books:[])];
   const categories=[{key:'bio',name:'生物信息学',parentKey:null,description:'生物信息学手册、课程与计算分析。',axes:[]}],documents=[],bodies=new Map(),anchors=new Map(),entries=[],assets=[],byUrl=new Map(),assetsByBook=new Map();
   function addAsset(data,ext){const resource='/knowledge/assets/biostar/'+createHash('sha256').update(data).digest('hex').slice(0,24)+ext;if(!assets.some(a=>a.path===resource))assets.push({path:resource,data});return resource;}
   for(const info of books){
