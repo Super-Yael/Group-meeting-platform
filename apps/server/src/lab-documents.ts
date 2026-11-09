@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3';
-import {categoryPath,inferLegacyCategory,leafCategories} from './lab-taxonomy.js';
+import {categoryPath,inferLegacyCategory,leafCategories,normalizeCategory} from './lab-taxonomy.js';
 
 type Actor={id:string;role:string};
 type Row={id:number;title:string;category:string;category_key:string;content:string;summary:string;aliases_json:string;tags_json:string;facets_json:string;archived:number;revision:number;author_id:string;[key:string]:unknown};
@@ -10,9 +10,9 @@ export function ensureDocumentSchema(db:Database.Database){
   for(const [name,definition] of Object.entries({category_key:"TEXT NOT NULL DEFAULT ''",summary:"TEXT NOT NULL DEFAULT ''",aliases_json:"TEXT NOT NULL DEFAULT '[]'",tags_json:"TEXT NOT NULL DEFAULT '[]'",facets_json:"TEXT NOT NULL DEFAULT '{}'",archived:'INTEGER NOT NULL DEFAULT 0',revision:'INTEGER NOT NULL DEFAULT 0'})){
    if(!fields.has(name))db.exec(`ALTER TABLE documents ADD COLUMN ${name} ${definition}`);
   }
-  const rows=db.prepare("SELECT id,title,category FROM documents WHERE category_key=''").all() as {id:number;title:string;category:string}[];
-  const update=db.prepare('UPDATE documents SET category_key=? WHERE id=?');
-  for(const row of rows)update.run(inferLegacyCategory(row.title,row.category),row.id);
+  const rows=db.prepare("SELECT id,title,category,category_key FROM documents WHERE category_key='' OR category_key LIKE 'wet/%' OR category_key LIKE 'dry/%' OR category_key LIKE 'bio/methods/%'").all() as {id:number;title:string;category:string;category_key:string}[];
+  const update=db.prepare('UPDATE documents SET category_key=?,category=? WHERE id=?');
+  for(const row of rows){const key=inferLegacyCategory(row.title,normalizeCategory(row.category_key||row.category));update.run(key,categoryPath(key),row.id);}
  })();
 }
 function array(value:unknown,label:string){
@@ -45,7 +45,7 @@ export function saveDocument(db:Database.Database,actor:Actor,input:Record<strin
   if(old&&actor.role!=='admin'&&old.author_id!==actor.id)throw failure('只有作者或管理员可以修改此页面',403);
   if(old&&input.baseRevision!==undefined&&input.baseRevision!==old.revision)throw failure('页面已被其他成员更新，当前草稿已保留，请重新载入最新版本后核对',409);
   const title=text(input.title,'标题',200,true),content=text(input.content,'正文',100000);
-  const categoryKey=typeof input.categoryKey==='string'?input.categoryKey:old?.category_key||inferLegacyCategory(title,String(input.category||''));
+  const categoryKey=normalizeCategory(typeof input.categoryKey==='string'?input.categoryKey:old?.category_key||inferLegacyCategory(title,String(input.category||'')));
   const category=leafCategories.find(c=>c.key===categoryKey);if(!category)throw failure('请选择有效的实验类别');
   const summary=input.summary===undefined?old?.summary||'':text(input.summary,'简介',1000);
   const aliases=input.aliases===undefined?json<string[]>(old?.aliases_json||'[]',[]):array(input.aliases,'别名');

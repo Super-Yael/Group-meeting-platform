@@ -7,83 +7,152 @@ import {createCipheriv,randomBytes,createHash} from 'node:crypto';
 import {unified} from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
+
 const web=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
-const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
-const parser=unified().use(remarkParse).use(remarkGfm),text=n=>n.value??(n.children||[]).map(text).join('');
+const parser=unified().use(remarkParse).use(remarkGfm);
+const nodeText=n=>n.value??(n.children||[]).map(nodeText).join('');
 const slug=s=>s.normalize('NFKC').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,'-').replace(/^-|-$/g,'')||'section';
-function headings(body,id){const result=[],counts=new Map();function walk(n){if(n.type==='heading'){const value=text(n),s=slug(value),count=(counts.get(s)||0)+1;counts.set(s,count);result.push({text:value,depth:n.depth,id:`method-${id}-${s}${count>1?'-'+count:''}`,offset:n.position.start.offset});}for(const c of n.children||[])walk(c);}walk(parser.parse(body));return result;}
-const sectionNames=['导读','环境安装','Unix 命令行','脚本编写','统计基础','数据来源','数据格式','数据可视化','序列本体','基因本体','可重复研究','测序仪器','测序数据','质量控制','模式匹配','序列比对','BLAST','短读段比对','SAM / BAM 格式','基因组变异','变异检测','RNA-seq 分析','ChIP-seq 分析','Ming Tang 的 ChIP-seq 教程','序列组装','宏基因组学','附录','Zika RNA-seq 实例'];
-const canonical=url=>{const u=new URL(url);u.hash='';u.search='';u.pathname=u.pathname.replace(/\/index\.html$/,'/').replace(/\/$/,'');return u.href.replace(/\/$/,'');};
-export async function buildKnowledge({contentDir=process.env.TEAM_DOC_DIR,outDir=path.join(web,'out/knowledge'),dataKey=process.env.DOCS_DATA_KEY}={}){
+const forbidden=/作业|测验|练习题|学生提交|提交要求|版权所有|版权|Copyright|All rights reserved|©|The Biostar Handbook|RNA[- ]Seq by Example|Bioinformatics Scripting|Applied Bioinformatics|FastTrack Bioinformatics|生物信息学手册|生物信息学脚本艺术/i;
+const quote=s=>"'"+s.replaceAll("'","'\\''")+"'";
+function walk(n,fn){fn(n);for(const c of n.children||[])walk(c,fn);}
+function headingIds(body,id){
+ const counts=new Map(),result=new Set(['method-page-title']);
+ walk(parser.parse(body),n=>{if(n.type==='heading'){const s=slug(nodeText(n)),count=(counts.get(s)||0)+1;counts.set(s,count);result.add(`method-${id}-${s}${count>1?'-'+count:''}`);}});
+ return result;
+}
+function within(root,file){
+ const resolved=path.resolve(root,file);
+ if(!resolved.startsWith(root+path.sep))throw new Error('Content path escapes repository: '+file);
+ return resolved;
+}
+function readJson(root,file){return JSON.parse(fs.readFileSync(within(root,file),'utf8'));}
+function validateTaxonomy(categories){
+ const keys=new Set();
+ for(const c of categories){
+  if(!c.key||keys.has(c.key)||!c.name||!Array.isArray(c.axes))throw new Error('Invalid or duplicate category: '+c.key);
+  keys.add(c.key);
+ }
+ for(const c of categories){
+  if(c.parentKey&&(!keys.has(c.parentKey)||!c.key.startsWith(c.parentKey+'/')))throw new Error('Category hierarchy must match key: '+c.key);
+  const seen=new Set([c.key]);let current=c;
+  while(current.parentKey){if(seen.has(current.parentKey))throw new Error('Category cycle: '+c.key);seen.add(current.parentKey);current=categories.find(x=>x.key===current.parentKey);}
+ }
+}
+export async function buildKnowledge({contentDir=process.env.TEAM_DOC_DIR,outDir=path.join(web,'out/knowledge'),dataKey=process.env.DOCS_DATA_KEY,syncServer=false}={}){
  if(!dataKey||Buffer.from(dataKey,'base64').length!==32)throw new Error('DOCS_DATA_KEY must be a 32-byte base64 secret');
  let temp;
  try{
   if(!contentDir){
    if(!process.env.DOCS_DEPLOY_KEY)throw new Error('Configure TEAM_DOC_DIR locally or DOCS_DEPLOY_KEY in Pages');
-   temp=fs.mkdtempSync(path.join(os.tmpdir(),'mm-private-docs-'));const keyFile=path.join(temp,'deploy-key');fs.writeFileSync(keyFile,process.env.DOCS_DEPLOY_KEY.trim()+'\n',{mode:0o600});
+   temp=fs.mkdtempSync(path.join(os.tmpdir(),'mm-private-docs-'));const keyFile=path.join(temp,'deploy-key');
+   fs.writeFileSync(keyFile,process.env.DOCS_DEPLOY_KEY.trim()+'\n',{mode:0o600});
    const known=path.join(web,'scripts/github-known-hosts');
    execFileSync('git',['clone','--quiet','--depth','1','--branch','main','ssh://git@ssh.github.com:443/Super-Yael/team_doc.git',path.join(temp,'source')],{env:{...process.env,GIT_SSH_COMMAND:`ssh -i ${quote(keyFile)} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${quote(known)}`},stdio:['ignore','pipe','pipe']});
    contentDir=path.join(temp,'source');
   }
-  contentDir=path.resolve(contentDir);const revision=fs.existsSync(path.join(contentDir,'.git'))?execFileSync('git',['-C',contentDir,'rev-parse','HEAD'],{encoding:'utf8'}).trim():'local-review';
-  const root=path.join(contentDir,'handbooks'),more=path.join(root,'books.json');
-  const books=[{key:'biostar',title:'生物信息学手册'},...(fs.existsSync(more)?JSON.parse(fs.readFileSync(more,'utf8')).books:[])];
-  const categories=[{key:'bio',name:'生物信息学',parentKey:null,description:'生物信息学手册、课程与计算分析。',axes:[]}],documents=[],bodies=new Map(),anchors=new Map(),entries=[],assets=[],byUrl=new Map(),assetsByBook=new Map();
-  function addAsset(data,ext){const resource='/knowledge/assets/biostar/'+createHash('sha256').update(data).digest('hex').slice(0,24)+ext;if(!assets.some(a=>a.path===resource))assets.push({path:resource,data});return resource;}
-  for(const info of books){
-   const book=path.join(root,info.key),manifest=JSON.parse(fs.readFileSync(path.join(book,'source-manifest.json'),'utf8')),status=JSON.parse(fs.readFileSync(path.join(book,'translation-status.json'),'utf8'));
-   if(status.completedSegments!==status.segments||status.chapters!==manifest.chapters.length)throw new Error('The full translation must be complete before publication: '+info.key);
-   const bookKey='bio/'+info.key,folders=manifest.sections||[...new Set(manifest.chapters.map(p=>p.section))].map((key,index)=>({key,name:sectionNames[index]||key}));
-   categories.push({key:bookKey,name:info.title,parentKey:'bio',description:'按原文目录阅读。',axes:[]});
-   folders.forEach(folder=>categories.push({key:bookKey+'/'+folder.key,name:folder.name,parentKey:bookKey,description:'',axes:[]}));
-   const media=new Map(),assetDir=path.join(book,'assets');for(const name of fs.existsSync(assetDir)?fs.readdirSync(assetDir):[]){const ext=path.extname(name).toLowerCase();if(!['.png','.jpg','.jpeg','.gif','.svg'].includes(ext))continue;media.set(name,addAsset(fs.readFileSync(path.join(assetDir,name)),ext));}assetsByBook.set(info.key,media);
-   const pages=[...manifest.chapters].sort((a,b)=>(a.order??a.id)-(b.order??b.id));
-   for(const [order,page] of pages.entries()){
-    let content=fs.readFileSync(path.join(book,'zh',page.key),'utf8');const english=fs.readFileSync(path.join(book,'en',page.key),'utf8');
-    const zhHead=headings(content,page.id),enHead=headings(english,page.id);if(zhHead.length!==enHead.length)throw new Error('Heading structure changed: '+info.key+'/'+page.key);
-    const title=zhHead[0]?.text||page.title;let removed=false;if(/^#\s/.test(content)){content=content.replace(/^# [^\n]*\n\s*/, '');removed=true;}
-    const bodyHead=headings(content,page.id),aliases=new Map();enHead.forEach((h,i)=>{const target=removed?(i===0?'method-page-title':bodyHead[i-1]?.id):bodyHead[i]?.id;if(target){aliases.set(slug(h.text),target);const original=page.originalHeadings?.[i]?.anchor;if(original)aliases.set(original,target);}});anchors.set(page.id,aliases);
-    const section=folders.find(f=>f.key===page.section),category=section?.name||page.section,first=parser.parse(content).children.find(n=>n.type==='paragraph'&&text(n).trim());
-    documents.push({id:page.id,title,category:info.title+' / '+category,category_key:bookKey+'/'+page.section,category_path:'生物信息学 / '+info.title+' / '+category,content:'',summary:first?text(first).replace(/\s+/g,' ').slice(0,200):'查看本章完整内容。',aliases:[page.title],tags:[],facets:{},archived:false,author_id:'',author_name:'',updated_at:status.translatedAt,collection:'handbook',book_key:info.key,order,body_url:`/knowledge/docs/${page.id}.json`,source_path:`handbooks/${info.key}/zh/${page.key}`});
-    bodies.set(page.id,content);const entry={...page,book:info.key};entries.push(entry);if(page.source&&!byUrl.has(canonical(page.source)))byUrl.set(canonical(page.source),entry);
-   }
+  contentDir=path.resolve(contentDir);
+  // Include working-tree content in the version so local previews cannot reuse a stale search index.
+  const catalog=readJson(contentDir,'catalog.json'),taxonomy=readJson(contentDir,'taxonomy.json'),redirects=readJson(contentDir,'redirects.json');
+  if(catalog.schema!==2||taxonomy.version!==2)throw new Error('Expected the topic catalogue (schema 2)');
+  const categories=taxonomy.categories;validateTaxonomy(categories);
+  const catByKey=new Map(categories.map(c=>[c.key,c]));
+  const categoryPath=key=>{const c=catByKey.get(key);return c.parentKey?categoryPath(c.parentKey)+' / '+c.name:c.name;};
+  const policyId=catalog.policy.id,documents=[],bodies=new Map(),assets=new Map();
+  const versionHash=createHash('sha256').update(JSON.stringify({catalog,taxonomy,redirects}));
+  const addAsset=(resource,data)=>{if(!assets.has(resource))assets.set(resource,data);};
+  const ids=new Set([policyId]);
+  for(const entry of catalog.documents){
+   if(!Number.isSafeInteger(entry.id)||entry.id<=0||ids.has(entry.id))throw new Error('Invalid or duplicate document ID: '+entry.id);
+   ids.add(entry.id);
+   if(!catByKey.has(entry.category_key))throw new Error('Unknown category: '+entry.category_key);
+   if(categories.some(c=>c.parentKey===entry.category_key))throw new Error('Documents must be stored in a topic leaf: '+entry.id);
+   if(!entry.file.startsWith('content/'+entry.category_key+'/'))throw new Error('File does not match document topic: '+entry.id);
+   let content=fs.readFileSync(within(contentDir,entry.file),'utf8');
+   const root=parser.parse(content),first=root.children[0];
+   if(forbidden.test(JSON.stringify([entry.title,entry.summary||'',entry.aliases||[],entry.tags||[]])))throw new Error('Source or teaching metadata in canonical document: '+entry.id);
+   walk(root,n=>{if(['text','code','inlineCode'].includes(n.type)&&forbidden.test(n.value||''))throw new Error('Source or teaching text in canonical document: '+entry.id);});
+   if(first?.type!=='heading'||first.depth!==1||nodeText(first)!==entry.title)throw new Error('Document title does not match catalogue: '+entry.id);
+   content=content.slice(first.position.end.offset).trim()+'\n';
+   if(!content.trim())throw new Error('Empty canonical document: '+entry.id);
+   const summary=parser.parse(content).children.find(n=>n.type==='paragraph'&&nodeText(n).trim());
+   const {file,source_ids,review_status,...metadata}=entry;
+   documents.push({...metadata,category:categoryPath(entry.category_key),category_path:categoryPath(entry.category_key),summary:entry.summary|| (summary?nodeText(summary).replace(/\s+/g,' ').slice(0,160):'查看方法、流程与结果解释。'),content:'',collection:'topics',author_id:'',author_name:'',updated_at:'',archived:false,body_url:`/knowledge/docs/${entry.id}.json`,source_path:file});
+   bodies.set(entry.id,content);versionHash.update(content);
   }
-  const rnaHome=documents.filter(d=>d.book_key==='rna-seq-by-example').sort((a,b)=>a.order-b.order)[0];
-  const rnaStub=documents.find(d=>d.book_key==='biostar'&&d.source_path.endsWith('/xxii-rna-seq-analysis/rna-seq-by-example.md'));
-  if(rnaHome&&rnaStub)rnaStub.redirect_to=rnaHome.id;
-  const byPath=new Map(entries.map(p=>[p.book+'\0'+p.key,p]));let localLinks=0;
-  function rewrite(href,page,image=false){
-   if(href.startsWith('/knowledge/'))return href;
-   if(image){
-    if(/^data:image\/svg\+xml;base64,/i.test(href))return addAsset(Buffer.from(href.split(',')[1],'base64'),'.svg');
-    if(/^https?:/i.test(href)){const name=decodeURIComponent(new URL(href).pathname.split('/').at(-1));const match=[...assetsByBook.values()].flatMap(m=>[...m.entries()]).find(([n])=>n.endsWith('-'+name));if(match)return match[1];return href;}
-    const name=decodeURIComponent(href.split('/').at(-1)?.split('?')[0]||'');const asset=assetsByBook.get(page.book)?.get(name);if(!asset)throw new Error('Missing local image: '+page.book+' / '+href);return asset;
-   }
-   if(href.startsWith('#')){const old=decodeURIComponent(href.slice(1));return '#'+encodeURIComponent(anchors.get(page.id)?.get(old)||old);}
-   if(/^(mailto:|ftp:)/i.test(href))return href;
-   let target;try{const resolved=new URL(href,page.source);target=byUrl.get(canonical(resolved.href));}catch{}
-   const [raw,fragment]=href.split('#');if(!target&&!/^(https?:|\/)/i.test(raw)){const key=decodeURIComponent(new URL(raw,'https://book.invalid/'+page.key).pathname.slice(1));target=byPath.get(page.book+'\0'+key);}
-   if(target){localLinks++;const anchor=fragment?(anchors.get(target.id)?.get(decodeURIComponent(fragment))||decodeURIComponent(fragment)):'';return `?view=documents&doc=${target.id}${anchor?'#'+encodeURIComponent(anchor):''}`;}
-   if(!/^(https?:|\/)/i.test(raw)&&/\.(md|html)(?:\?|$)/.test(raw))return new URL(raw.replace(/\.md(?=\?|$)/,'.html'),page.source).href;
-   return href;
+  let policy=fs.readFileSync(within(contentDir,catalog.policy.file),'utf8');
+  const policyHeading=parser.parse(policy).children[0];
+  if(policyHeading?.type!=='heading')throw new Error('Missing policy title');
+  const policyTitle=nodeText(policyHeading);policy=policy.slice(policyHeading.position.end.offset).trim()+'\n';
+  documents.push({id:policyId,title:policyTitle,category:'使用与来源说明',category_key:'policy',category_path:'使用与来源说明',summary:'集中列明参考来源、权利信息与团队资料使用要求。',aliases:[],tags:[],facets:{},content:'',collection:'governance',order:99999,author_id:'',author_name:'',updated_at:'',archived:false,body_url:`/knowledge/docs/${policyId}.json`,source_path:catalog.policy.file});
+  bodies.set(policyId,policy);versionHash.update(policy);
+  for(const [old,target] of Object.entries(redirects.documents)){
+   if(!/^\d+$/.test(old)||ids.has(Number(old)))throw new Error('Redirect shadows canonical document: '+old);
+   if(target!==null&&!ids.has(target))throw new Error('Redirect target is missing: '+old);
   }
-  for(const page of entries){let body=bodies.get(page.id),changes=[];
-   function walk(n){if(['link','image'].includes(n.type)){const href=rewrite(n.url,page,n.type==='image');if(href!==n.url){const raw=body.slice(n.position.start.offset,n.position.end.offset),i=raw.lastIndexOf('](');if(i>=0)changes.push({start:n.position.start.offset+i+2,end:n.position.end.offset-1,text:href+(n.title?' '+JSON.stringify(n.title):'')});}}for(const c of n.children||[])walk(c);}walk(parser.parse(body));
-   for(const change of changes.sort((a,b)=>b.start-a.start))body=body.slice(0,change.start)+change.text+body.slice(change.end);bodies.set(page.id,body);
+  for(const [old,target] of Object.entries(redirects.categories))if(target&&!catByKey.has(target))throw new Error('Category redirect target is missing: '+old);
+  const anchors=new Map([...bodies].map(([id,body])=>[id,headingIds(body,id)]));
+  for(const [key,target] of Object.entries(redirects.anchors)){
+   if(!ids.has(target.id)||!anchors.get(target.id).has(target.hash))throw new Error('Invalid legacy heading target: '+key);
   }
-  const methodIndex=path.join(contentDir,'methods/index.json');let methodCount=0;
-  if(fs.existsSync(methodIndex)){
-   const methods=JSON.parse(fs.readFileSync(methodIndex,'utf8'));categories.push(...methods.categories);
-   for(const method of methods.documents){if(method.archived)continue;const file=path.join(contentDir,'methods',method.file);const body=fs.readFileSync(file,'utf8');const {file:_,...metadata}=method;documents.push({...metadata,content:'',author_id:'',author_name:'',collection:'methods',order:method.id,body_url:`/knowledge/docs/${method.id}.json`,source_path:'methods/'+method.file});bodies.set(method.id,body);methodCount++;}
+  let localLinks=0;
+  for(const doc of documents){
+   const body=bodies.get(doc.id),changes=[];
+   walk(parser.parse(body),n=>{
+    if(n.type!=='link'&&n.type!=='image')return;
+    let href=n.url;
+    if(n.type==='image'&&href.startsWith('/assets/')){
+     const name=href.slice('/assets/'.length);if(name.includes('/')||!/^[-\w.]+$/.test(name))throw new Error('Invalid local asset: '+href);
+     const data=fs.readFileSync(within(contentDir,'assets/'+name)),resource='/knowledge/assets/'+createHash('sha256').update(data).digest('hex').slice(0,24)+path.extname(name).toLowerCase();addAsset(resource,data);href=resource;
+    }else if(n.type==='image'&&/^data:image\/svg\+xml;base64,/i.test(href)){
+     const data=Buffer.from(href.split(',')[1],'base64'),resource='/knowledge/assets/'+createHash('sha256').update(data).digest('hex').slice(0,24)+'.svg';addAsset(resource,data);href=resource;
+    }else if(n.type==='image'&&!/^(https?:|data:)/i.test(href))throw new Error('Unresolved local image: '+doc.id+' '+href);
+    if(n.type==='link'&&href.startsWith('?view=documents')){
+     const url=new URL(href,'https://local.invalid'),requested=Number(url.searchParams.get('doc'));
+     if(requested){
+      const target=Object.hasOwn(redirects.documents,String(requested))?redirects.documents[requested]:requested;
+      if(target===null)href='?view=documents';
+      else{
+       if(!ids.has(target))throw new Error('Missing linked document: '+doc.id+' -> '+requested);
+       const fragment=decodeURIComponent(url.hash.slice(1)),alias=redirects.anchors[`${requested}#${fragment}`];
+       const hash=alias?.hash||fragment;
+       if(hash&&!anchors.get(target).has(hash))throw new Error('Missing linked heading: '+doc.id+' -> '+target+'#'+hash);
+       href=`?view=documents&doc=${target}`+(hash&&hash!=='method-page-title'?'#'+encodeURIComponent(hash):'');localLinks++;
+      }
+     }
+    }else if(n.type==='link'&&href.startsWith('#')){
+     if(!anchors.get(doc.id).has(decodeURIComponent(href.slice(1))))throw new Error('Missing local heading: '+doc.id+' '+href);
+    }else if(n.type==='link'&&!/^(https?:|mailto:|ftp:|\/knowledge\/)/i.test(href))throw new Error('Unresolved relative link: '+doc.id+' '+href);
+    if(href!==n.url){
+     // Markdown positions refer to the original source; replace only the destination.
+     const raw=body.slice(n.position.start.offset,n.position.end.offset),i=raw.lastIndexOf('](');
+     if(i<0)throw new Error('Cannot rewrite reference-style local resource: '+doc.id);
+     changes.push({start:n.position.start.offset+i+2,end:n.position.end.offset-1,text:href+(n.title?' '+JSON.stringify(n.title):'')});
+    }
+   });
+   let rewritten=body;for(const c of changes.sort((a,b)=>b.start-a.start))rewritten=rewritten.slice(0,c.start)+c.text+rewritten.slice(c.end);bodies.set(doc.id,rewritten);
   }
-  const policyId=90000,policyFile='governance/usage-and-confidentiality.md';let policy=fs.readFileSync(path.join(contentDir,policyFile),'utf8');const policyTitle=policy.split('\n')[0].replace(/^#\s+/,'');policy=policy.replace(/^# [^\n]*\n\s*/,'');
-  documents.push({id:policyId,title:policyTitle,category:'使用与保密声明',category_key:'policy',category_path:'使用与保密声明',content:'',summary:'仅限授权成员内部学习和研究；参考来源、可用性及保密要求集中列明。',aliases:['保密协议','使用限制','版权'],tags:[],facets:{},archived:false,author_id:'',author_name:'',collection:'governance',order:99999,body_url:`/knowledge/docs/${policyId}.json`,source_path:policyFile});bodies.set(policyId,policy);
-  assets.push({path:'/knowledge/assets/governance/confidentiality-agreement.pdf',data:fs.readFileSync(path.join(contentDir,'governance/assets/confidentiality-agreement.pdf'))});
-  fs.rmSync(outDir,{recursive:true,force:true});fs.mkdirSync(outDir,{recursive:true});const key=Buffer.from(dataKey,'base64');let bytes=0,files=0;
-  function write(resource,data){const clear=Buffer.isBuffer(data)?data:Buffer.from(JSON.stringify(data)),nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,nonce);cipher.setAAD(Buffer.from(resource));const encrypted=Buffer.concat([Buffer.from('MLD1'),nonce,cipher.update(clear),cipher.final(),cipher.getAuthTag()]);const filename=path.join(outDir,resource.slice('/knowledge/'.length)+'.bin');fs.mkdirSync(path.dirname(filename),{recursive:true});fs.writeFileSync(filename,encrypted);bytes+=encrypted.length;files++;}
-  write('/knowledge/catalog.json',{version:revision,categories,documents,policyId,chapterCount:entries.length,sectionCount:categories.filter(c=>c.parentKey?.startsWith('bio/')).length,bookCount:books.length,methodCount});write('/knowledge/search.json',documents.map(d=>({id:d.id,content:bodies.get(d.id)})));
-  for(const doc of documents)write(doc.body_url,{id:doc.id,content:bodies.get(doc.id)});for(const asset of assets)write(asset.path,asset.data);
-  const result={documents:documents.length,bookChapters:entries.length,books:books.length,methods:methodCount,media:assets.length-1,pdf:1,localLinks,encryptedFiles:files,encryptedBytes:bytes,contentRevision:revision};console.log(JSON.stringify(result));return result;
+  const agreement='/knowledge/assets/governance/confidentiality-agreement.pdf';
+  addAsset(agreement,fs.readFileSync(within(contentDir,'governance/assets/confidentiality-agreement.pdf')));
+  for(const [resource,data] of assets)versionHash.update(resource).update(data);
+  const revision=versionHash.digest('hex');
+  if(syncServer){
+   const generated=path.resolve(web,'../server/src/catalog-taxonomy.generated.ts');
+   fs.writeFileSync(generated,'// Generated from team_doc/taxonomy.json. Edit the document repository, then rebuild.\nexport const topicCategories = '+JSON.stringify(categories,null,2)+';\nexport const legacyCategoryKeys = '+JSON.stringify(redirects.categories,null,2)+' as Record<string,string>;\n');
+  }
+  // Validate everything before replacing a previously working output directory.
+  fs.rmSync(outDir,{recursive:true,force:true});fs.mkdirSync(outDir,{recursive:true});
+  const key=Buffer.from(dataKey,'base64');let bytes=0,files=0;
+  function write(resource,data){
+   const clear=Buffer.isBuffer(data)?data:Buffer.from(JSON.stringify(data)),nonce=randomBytes(12),cipher=createCipheriv('aes-256-gcm',key,nonce);cipher.setAAD(Buffer.from(resource));
+   const encrypted=Buffer.concat([Buffer.from('MLD1'),nonce,cipher.update(clear),cipher.final(),cipher.getAuthTag()]),filename=path.join(outDir,resource.slice('/knowledge/'.length)+'.bin');
+   fs.mkdirSync(path.dirname(filename),{recursive:true});fs.writeFileSync(filename,encrypted);bytes+=encrypted.length;files++;
+  }
+  write('/knowledge/catalog.json',{version:revision,categories,documents,policyId,documentCount:catalog.documents.length,redirects});
+  write('/knowledge/search.json',documents.filter(d=>d.id!==policyId).map(d=>({id:d.id,content:bodies.get(d.id)})));
+  for(const doc of documents)write(doc.body_url,{id:doc.id,content:bodies.get(doc.id)});
+  for(const [resource,data] of assets)write(resource,data);
+  const result={documents:catalog.documents.length,policy:1,topics:categories.length,media:assets.size-1,localLinks,encryptedFiles:files,encryptedBytes:bytes,contentRevision:revision};
+  console.log(JSON.stringify(result));return result;
  }finally{if(temp)fs.rmSync(temp,{recursive:true,force:true});}
 }
-if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))buildKnowledge().catch(error=>{console.error(error.message);process.exitCode=1;});
+if(process.argv[1]&&path.resolve(process.argv[1])===fileURLToPath(import.meta.url))buildKnowledge({syncServer:true}).catch(error=>{console.error(error.message);process.exitCode=1;});

@@ -9,7 +9,7 @@ test('catalog metadata migration preserves all original text, ownership and IDs 
   db.prepare('INSERT INTO documents(id,title,category,content,author_id) VALUES(7,?,?,?,?)').run('FISH 原位杂交','测序技术','Original content','member');
   ensureDocumentSchema(db);ensureDocumentSchema(db);
   const doc=getDocument(db,{id:'member',role:'member'},7);
-  assert.equal(doc.content,'Original content');assert.equal(doc.author_id,'member');assert.equal(doc.category_key,'wet/histology');assert.equal(doc.id,7);assert.deepEqual(doc.aliases,[]);
+  assert.equal(doc.content,'Original content');assert.equal(doc.author_id,'member');assert.equal(doc.category_key,'histology');assert.equal(doc.id,7);assert.deepEqual(doc.aliases,[]);
  }finally{db.close();}
 });
 test('generation and coverage are stored independently; invalid facets and unauthorized edits cannot change data',()=>{
@@ -33,8 +33,10 @@ test('generation and coverage are stored independently; invalid facets and unaut
 });
 test('every family has independent views and the catalogue contains no experiment-design section',()=>{
  assert.ok(!catalogCategories.some(c=>c.name.includes('实验设计')));
- assert.ok(catalogCategories.filter(c=>c.parentKey).every(c=>c.axes.length>=2));
- const seq=catalogCategories.find(c=>c.key==='wet/sequencing')!;
+ assert.ok(!catalogCategories.some(c=>c.key==='wet'||c.key==='dry'));
+ assert.ok(catalogCategories.filter(c=>c.parentKey).every(c=>c.key.startsWith(c.parentKey+'/')));
+ assert.ok(catalogCategories.find(c=>c.key==='cells')?.parentKey===null);
+ const seq=catalogCategories.find(c=>c.key==='bio/sequencing')!;
  assert.ok(seq.axes.find(a=>a.key==='generation')!.values.some(v=>v.key==='second'));
  assert.ok(seq.axes.find(a=>a.key==='breadth')!.values.some(v=>v.key==='genome'));
  assert.ok(!seq.axes.find(a=>a.key==='generation')!.values.some(v=>v.label.includes('WGS')));

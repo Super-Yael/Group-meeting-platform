@@ -30,7 +30,7 @@ export async function serveKnowledge(request:Request,env:KnowledgeEnv):Promise<R
  if(!['GET','HEAD'].includes(request.method))return failure('不支持此操作',405);
  const url=new URL(request.url);let pathname:string;
  try{pathname=decodeURIComponent(url.pathname);}catch{return failure('资源路径无效',400);}
- if(!pathname.startsWith('/knowledge/')||pathname.includes('\\')||pathname.includes('%')||pathname.split('/').some(s=>s==='..'||s==='.')||!/^\/knowledge\/(?:catalog\.json|search\.json|docs\/\d+\.json|assets\/(?:biostar\/[a-zA-Z0-9_-]+\.(?:png|jpg|jpeg|gif|svg)|governance\/confidentiality-agreement\.pdf))$/.test(pathname))return failure('资源不存在',404);
+ if(!pathname.startsWith('/knowledge/')||pathname.includes('\\')||pathname.includes('%')||pathname.split('/').some(s=>s==='..'||s==='.')||!/^\/knowledge\/(?:catalog\.json|search\.json|docs\/\d+\.json|assets\/(?:[a-f0-9]{24}\.(?:png|jpg|jpeg|gif|svg)|governance\/confidentiality-agreement\.pdf))$/.test(pathname))return failure('资源不存在',404);
  try{
   const keyBytes=unbase64(env.DOCS_DATA_KEY);if(keyBytes.length!==32)return failure('文档服务密钥配置无效',503);
   url.pathname=pathname+'.bin';url.search='';

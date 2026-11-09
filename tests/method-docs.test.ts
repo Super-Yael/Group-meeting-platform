@@ -47,7 +47,7 @@ import {catalogCategories} from '../apps/server/src/lab-taxonomy';
 test('catalog migration classifies without replacing team edits, remains atomic and never reimports changed pages',()=>{
  const db=new Database(':memory:');
  db.exec("CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,role TEXT);INSERT INTO users VALUES('admin','Admin','admin'),('member','Member','member');CREATE TABLE documents(id INTEGER PRIMARY KEY,title TEXT,category TEXT,content TEXT,author_id TEXT,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE audit_log(id INTEGER PRIMARY KEY,actor_id TEXT,action TEXT,details TEXT);INSERT INTO documents(id,title,category,content,author_id) VALUES(1,'Existing','Old','Team authored text','member');INSERT INTO audit_log(actor_id,action,details) VALUES('admin','document.import','{\"key\":\"existing\",\"documentId\":1}');");
- const input={migrationId:'catalog-test',updates:[{key:'existing',expectedTitle:'Existing',title:'Canonical',categoryKey:'wet/sequencing',content:'Do not overwrite',summary:'Scope',aliases:['NGS'],tags:[],facets:{generation:['second']},archived:false}],pages:[{key:'new-method',expectedTitle:'New',title:'New',categoryKey:'wet/sequencing',summary:'Genome',content:'Reference',aliases:['WGS'],tags:[],facets:{breadth:['genome']},archived:false}]};
+ const input={migrationId:'catalog-test',updates:[{key:'existing',expectedTitle:'Existing',title:'Canonical',categoryKey:'bio/sequencing',content:'Do not overwrite',summary:'Scope',aliases:['NGS'],tags:[],facets:{generation:['second']},archived:false}],pages:[{key:'new-method',expectedTitle:'New',title:'New',categoryKey:'bio/sequencing',summary:'Genome',content:'Reference',aliases:['WGS'],tags:[],facets:{breadth:['genome']},archived:false}]};
  const options={saveDocument,ensureDocumentSchema,categories:catalogCategories};
  try{
   assert.equal(migrateCatalog(db,input,'admin',options).length,2);assert.equal((db.prepare('SELECT COUNT(*) n FROM documents').get() as any).n,1);
@@ -61,5 +61,24 @@ test('catalog migration classifies without replacing team edits, remains atomic 
   assert.throws(()=>migrateCatalog(db,{...input,migrationId:'failed-test',archiveLegacy:[{id:999,expectedTitle:'Missing'}]},'admin',{...options,apply:true}),/identity changed/);
   assert.equal((db.prepare('SELECT COUNT(*) n FROM documents').get() as any).n,before,'a failed batch rolls back every write');
   assert.equal((db.prepare("SELECT COUNT(*) n FROM audit_log WHERE action='document.catalog.migrate' AND json_extract(details,'$.migrationId')='failed-test'").get() as any).n,0);
+ }finally{db.close();}
+});
+
+import {resolveDocumentRoute,type MethodCatalog} from '../apps/web/lib/method-docs';
+import {inferLegacyCategory} from '../apps/server/src/lab-taxonomy';
+test('topic routes preserve merged links and distinguish the two SRA meanings',()=>{
+ const catalog:MethodCatalog={categories:[{key:'bio/sequencing',name:'测序',parentKey:'bio',description:'',axes:[]}],documents:[],redirects:{documents:{34:10,60267:null},categories:{'wet/sequencing':'bio/sequencing'},anchors:{'34#old':{id:10,hash:'method-10-范围'}}}};
+ assert.deepEqual(resolveDocumentRoute(catalog,34,'wet/sequencing','old'),{id:10,category:'bio/sequencing',hash:'method-10-范围'});
+ assert.equal(resolveDocumentRoute(catalog,60267,'').id,60267);
+ assert.equal(inferLegacyCategory('从 SRA 下载读段','测序技术'),'bio/data');
+ assert.equal(inferLegacyCategory('血清素释放试验 SRA','测序技术'),'function');
+ assert.equal(inferLegacyCategory('CD138 磁珠分选','湿实验 / 测序'),'cells');
+});
+test('legacy import accepts newly independent experiment roots as leaf categories',()=>{
+ const db=new Database(':memory:');db.exec("CREATE TABLE users(id TEXT PRIMARY KEY,name TEXT,role TEXT);INSERT INTO users VALUES('admin','Admin','admin');CREATE TABLE documents(id INTEGER PRIMARY KEY,title TEXT,category TEXT,content TEXT,author_id TEXT,updated_at TEXT DEFAULT CURRENT_TIMESTAMP);CREATE TABLE audit_log(id INTEGER PRIMARY KEY,actor_id TEXT,action TEXT,details TEXT);");
+ try{
+  const input={migrationId:'root-topic',updates:[],pages:[{key:'cell-culture',title:'细胞培养',content:'培养说明。',categoryKey:'cells',summary:'培养方法',aliases:[],tags:[],facets:{purpose:['culture']},archived:false}]};
+  const rows=migrateCatalog(db,input,'admin',{apply:true,saveDocument,ensureDocumentSchema,categories:catalogCategories});
+  assert.equal(rows[0].action,'create');assert.equal((db.prepare('SELECT category_key FROM documents').get() as any).category_key,'cells');
  }finally{db.close();}
 });

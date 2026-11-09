@@ -16,7 +16,7 @@ test('document proofs bind the signed-in session, origin, expiry and role; forge
 });
 test('catalog, images, encrypted blobs and PDF are unavailable without a session and never fall back to plaintext',async()=>{
  let reads=0;const env={DOCS_ACCESS_SECRET:secret,DOCS_DATA_KEY:dataKey,ASSETS:{fetch:async()=>{reads++;return new Response('should not be read');}}};
- for(const path of ['/knowledge/catalog.json','/knowledge/catalog.json.bin','/knowledge/assets/biostar/example.png','/knowledge/assets/governance/confidentiality-agreement.pdf'])assert.equal((await serveKnowledge(new Request(origin+path),env)).status,401);
+ for(const path of ['/knowledge/catalog.json','/knowledge/catalog.json.bin','/knowledge/assets/0123456789abcdef01234567.png','/knowledge/assets/governance/confidentiality-agreement.pdf'])assert.equal((await serveKnowledge(new Request(origin+path),env)).status,401);
  assert.equal(reads,0);
  assert.equal((await serveKnowledge(await request(),{})).status,503);
  assert.equal((await serveKnowledge(await request('/knowledge/catalog.json.bin'),env)).status,404);assert.equal(reads,0);
@@ -34,7 +34,7 @@ test('ciphertext cannot be moved to a different URL and malformed paths cannot s
  const env={DOCS_ACCESS_SECRET:secret,DOCS_DATA_KEY:dataKey,ASSETS:{fetch:async()=>new Response(packed)}};
  assert.equal((await serveKnowledge(await request('/knowledge/search.json'),env)).status,502);
  assert.equal((await serveKnowledge(await request('/knowledge/%252e%252e/config'),env)).status,404);
- assert.equal((await serveKnowledge(await request('/knowledge/assets/biostar/test.html'),env)).status,404);
+ assert.equal((await serveKnowledge(await request('/knowledge/assets/0123456789abcdef01234567.html'),env)).status,404);
 });
 test('only an authenticated bootstrap issues a proof, and logout clears it without sharing it across hosts',async()=>{
  const req=new Request(origin+'/api/bootstrap',{headers:{Cookie:'mm_session=test-session'}});
@@ -52,7 +52,7 @@ test('a direct protected PDF renews an expired edge proof through authenticated 
  const denied=await knowledgeGateway(new Request(origin+path,{headers:{Cookie:'mm_session=invalid-test'}}),env,(async()=>Response.json({error:'Expired'},{status:401})) as typeof fetch);assert.equal(denied.status,401);
 });
 test('SVG figures require authentication and are sandboxed when opened directly',async()=>{
- const path='/knowledge/assets/biostar/sample.svg',svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),env={DOCS_ACCESS_SECRET:secret,DOCS_DATA_KEY:dataKey,ASSETS:{fetch:async()=>new Response(encrypted(path,svg))}};
+ const path='/knowledge/assets/0123456789abcdef01234567.svg',svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'),env={DOCS_ACCESS_SECRET:secret,DOCS_DATA_KEY:dataKey,ASSETS:{fetch:async()=>new Response(encrypted(path,svg))}};
  assert.equal((await serveKnowledge(new Request(origin+path),env)).status,401);
  const res=await serveKnowledge(await request(path),env);assert.equal(res.status,200);assert.equal(res.headers.get('Content-Type'),'image/svg+xml');assert.match(res.headers.get('Content-Security-Policy')!,/sandbox.*default-src 'none'/);assert.deepEqual(Buffer.from(await res.arrayBuffer()),svg);
 });

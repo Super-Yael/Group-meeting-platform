@@ -5,8 +5,15 @@ import remarkGfm from 'remark-gfm';
 export type FacetValue={key:string;label:string;aliases?:string[]};
 export type CatalogAxis={key:string;label:string;description:string;values:FacetValue[]};
 export type CatalogCategory={key:string;name:string;parentKey:string|null;description:string;axes:CatalogAxis[]};
-export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number;collection?:string;book_key?:string;redirect_to?:number;order?:number;body_url?:string;source_path?:string;search_text?:string};
-export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[];version?:string;policyId?:number;chapterCount?:number;sectionCount?:number;bookCount?:number;methodCount?:number};
+export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number;collection?:string;kind?:string;redirect_to?:number;order?:number;body_url?:string;source_path?:string;search_text?:string};
+export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[];version?:string;policyId?:number;documentCount?:number;redirects?:{documents:Record<string,number|null>;categories:Record<string,string>;anchors:Record<string,{id:number;hash:string}>}};
+export function resolveDocumentRoute(catalog:MethodCatalog,id:number|null,category:string,hash=''){
+ const redirects=catalog.redirects;
+ const target=id&&redirects&&Object.hasOwn(redirects.documents,String(id))?redirects.documents[String(id)]:id;
+ const anchor=id?redirects?.anchors[`${id}#${hash}`]:undefined;
+ const resolvedCategory=redirects?.categories[category]??category;
+ return {id:target===null&&id?id:anchor?.id??target,category:catalog.categories.some(c=>c.key===resolvedCategory)?resolvedCategory:'',hash:anchor?.hash||(target!==id?'method-page-title':hash)};
+}
 export type DocumentHeading={id:string;text:string;depth:number;offset:number};
 type MarkdownNode={type:string;value?:string;alt?:string;depth?:number;children?:MarkdownNode[];position?:{start:{offset?:number}}};
 
@@ -34,11 +41,11 @@ export function categoryTrail(categories:CatalogCategory[],key:string):CatalogCa
  while(current&&!seen.has(current.key)){trail.unshift(current);seen.add(current.key);current=categories.find(c=>c.key===current!.parentKey);}
  return trail;
 }
-export function documentsInCategory(documents:MethodDocument[],key:string){return documents.filter(doc=>!doc.archived&&(!key||doc.category_key===key||doc.category_key?.startsWith(key+'/')));}
+export function documentsInCategory(documents:MethodDocument[],key:string){return documents.filter(doc=>!doc.archived&&!doc.redirect_to&&(!key||doc.category_key===key||doc.category_key?.startsWith(key+'/')));}
 const normalize=(value:string)=>value.normalize('NFKC').toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu,'');
 export function filterDocuments(documents:MethodDocument[],query:string,categories:CatalogCategory[]=[]){
  const terms=query.normalize('NFKC').toLocaleLowerCase().trim().split(/\s+/).map(normalize).filter(Boolean);
- return documents.filter(doc=>!doc.archived).map(doc=>{
+ return documents.filter(doc=>!doc.archived&&!doc.redirect_to).map(doc=>{
   const category=categories.find(c=>c.key===doc.category_key);
   const facets=category?.axes.flatMap(axis=>axis.values.filter(v=>doc.facets?.[axis.key]?.includes(v.key)).flatMap(v=>[v.label,...v.aliases||[]]))||[];
   const aliases=(doc.aliases||[]).map(normalize),title=normalize(doc.title);

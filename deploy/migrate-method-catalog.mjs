@@ -12,7 +12,7 @@ export function validateCatalog(input,categories){
  for(const page of [...input.updates,...input.pages]){
   if(!page||typeof page.key!=='string'||!/^[-a-z0-9]{2,80}$/.test(page.key)||keys.has(page.key))throw new Error('Import keys must be unique');keys.add(page.key);
   for(const [key,max] of [['title',200],['summary',1000],['content',100000]])if(typeof page[key]!=='string'||page[key].length>max||key==='title'&&!page[key].trim())throw new Error(`Invalid ${key}: ${page.key}`);
-  const category=categories.find(c=>c.key===page.categoryKey&&(c.parentKey||c.key==='unfiled'));if(!category)throw new Error(`Invalid category: ${page.key}`);
+  const category=categories.find(c=>c.key===page.categoryKey&&!categories.some(child=>child.parentKey===c.key));if(!category)throw new Error(`Invalid category: ${page.key}`);
   for(const field of ['aliases','tags'])if(!Array.isArray(page[field])||page[field].length>50||page[field].some(s=>typeof s!=='string'||!s.trim()||s.length>100))throw new Error(`Invalid ${field}: ${page.key}`);
   if(!page.facets||typeof page.facets!=='object'||Array.isArray(page.facets))throw new Error(`Invalid facets: ${page.key}`);
   for(const [key,values] of Object.entries(page.facets)){
