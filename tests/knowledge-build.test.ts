@@ -60,6 +60,24 @@ test('working-tree edits change the catalogue version while identical inputs ret
  }finally{fs.rmSync(f.dir,{recursive:true,force:true});}
 });
 
+test('Git-tracked reference notes and attachments never enter published knowledge or its content version',async()=>{
+ const f=fixture();try{
+  const before=await f.build(),catalogBefore=JSON.parse(f.read('/knowledge/catalog.json').toString());
+  const filesBefore=fs.readdirSync(f.out,{recursive:true}).toSorted();
+  const marker='REFERENCE_ONLY_BIOTREE_NOTE';
+  f.write('references/biotree/README.md',`# The Biostar Handbook\n\n${marker}\n\nCopyright source notes.\n\n## 家庭作业\n\n仅供记录。\n`);
+  f.write('references/biotree/assets/private.svg',`<svg>${marker}</svg>`);
+  f.json('references/biotree/catalog.json',{documents:[{id:99999,title:marker}]});
+  const after=await f.build(),catalog=JSON.parse(f.read('/knowledge/catalog.json').toString());
+  assert.equal(after.contentRevision,before.contentRevision);
+  assert.deepEqual(catalog,catalogBefore);
+  assert.equal(after.documents,before.documents);assert.equal(after.media,before.media);
+  assert.deepEqual(fs.readdirSync(f.out,{recursive:true}).toSorted(),filesBefore);
+  const published=[f.read('/knowledge/catalog.json').toString(),f.read('/knowledge/search.json').toString(),...catalog.documents.map((d:any)=>f.read(d.body_url).toString())].join('\n');
+  assert.ok(!published.includes(marker));assert.ok(!published.includes('references/biotree'));
+ }finally{fs.rmSync(f.dir,{recursive:true,force:true});}
+});
+
 test('broken topics, references, teaching content and shadowing redirects fail before replacing output',async()=>{
  const cases=[
   (f:ReturnType<typeof fixture>)=>f.json('redirects.json',{documents:{1:51},categories:{},anchors:{}}),
