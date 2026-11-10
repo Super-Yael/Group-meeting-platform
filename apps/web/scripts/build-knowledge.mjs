@@ -91,6 +91,11 @@ export async function buildKnowledge({contentDir=process.env.TEAM_DOC_DIR,outDir
   }
   for(const [old,target] of Object.entries(redirects.categories))if(target&&!catByKey.has(target))throw new Error('Category redirect target is missing: '+old);
   const anchors=new Map([...bodies].map(([id,body])=>[id,headingIds(body,id)]));
+  for(const c of categories){
+   if(c.startDocumentId===undefined)continue;
+   const start=documents.find(d=>d.id===c.startDocumentId);
+   if(!start||!(start.category_key===c.key||start.category_key.startsWith(c.key+'/')))throw new Error('Invalid category start document: '+c.key);
+  }
   for(const [key,target] of Object.entries(redirects.anchors)){
    if(!ids.has(target.id)||!anchors.get(target.id).has(target.hash))throw new Error('Invalid legacy heading target: '+key);
   }

@@ -1432,147 +1432,39 @@ export const topicCategories = [
   },
   {
     "key": "bio/single-cell",
-    "name": "单细胞与空间组学",
+    "name": "单细胞转录组",
     "parentKey": "bio",
-    "description": "按主题查阅方法、流程与问题排查。",
-    "axes": [
-      {
-        "key": "data",
-        "label": "按数据类型",
-        "description": "从已有数据寻找分析方法。",
-        "values": [
-          {
-            "key": "dna",
-            "label": "DNA / 基因组",
-            "aliases": [
-              "genome",
-              "基因组"
-            ]
-          },
-          {
-            "key": "rna",
-            "label": "RNA / 转录组",
-            "aliases": [
-              "RNA-seq",
-              "转录组"
-            ]
-          },
-          {
-            "key": "single",
-            "label": "单细胞 / 空间",
-            "aliases": [
-              "scRNA",
-              "single cell",
-              "spatial"
-            ]
-          },
-          {
-            "key": "epigenetic",
-            "label": "表观组",
-            "aliases": [
-              "ATAC",
-              "ChIP",
-              "甲基化"
-            ]
-          },
-          {
-            "key": "protein",
-            "label": "蛋白 / 代谢",
-            "aliases": [
-              "proteomics",
-              "metabolomics"
-            ]
-          },
-          {
-            "key": "microbe",
-            "label": "微生物 / 微生物组",
-            "aliases": [
-              "细菌",
-              "bacteria",
-              "微生物",
-              "microbiome"
-            ]
-          }
-        ]
-      },
-      {
-        "key": "task",
-        "label": "按分析任务",
-        "description": "从分析工作所处的阶段寻找方法。",
-        "values": [
-          {
-            "key": "qc",
-            "label": "质量控制",
-            "aliases": []
-          },
-          {
-            "key": "alignment",
-            "label": "比对 / 组装",
-            "aliases": []
-          },
-          {
-            "key": "quantification",
-            "label": "定量 / 差异分析",
-            "aliases": []
-          },
-          {
-            "key": "annotation",
-            "label": "注释 / 富集",
-            "aliases": []
-          },
-          {
-            "key": "integration",
-            "label": "整合 / 网络",
-            "aliases": []
-          },
-          {
-            "key": "variation",
-            "label": "变异与克隆",
-            "aliases": []
-          }
-        ]
-      },
-      {
-        "key": "system",
-        "label": "按研究体系",
-        "description": "方法可用于不同研究对象；分类不限制具体疾病或物种。",
-        "values": [
-          {
-            "key": "human",
-            "label": "人类 / 临床样本",
-            "aliases": [
-              "临床",
-              "人体"
-            ]
-          },
-          {
-            "key": "tumor",
-            "label": "肿瘤研究",
-            "aliases": [
-              "cancer",
-              "oncology"
-            ]
-          },
-          {
-            "key": "microbe",
-            "label": "微生物研究",
-            "aliases": [
-              "细菌",
-              "真菌",
-              "bacteria"
-            ]
-          },
-          {
-            "key": "model",
-            "label": "动物 / 模型体系",
-            "aliases": [
-              "mouse",
-              "小鼠"
-            ]
-          }
-        ]
-      }
-    ]
+    "axes": [],
+    "description": "从计数矩阵到细胞身份、样本比较和研究问题。第一次阅读从分析路线开始。",
+    "startDocumentId": 98
+  },
+  {
+    "key": "bio/single-cell/standard",
+    "name": "01 入门与标准分析",
+    "parentKey": "bio/single-cell",
+    "description": "按顺序理解原理、读入、质控、表达处理、整合、聚类、注释与样本比较。",
+    "axes": []
+  },
+  {
+    "key": "bio/single-cell/questions",
+    "name": "02 按研究问题深入",
+    "parentKey": "bio/single-cell",
+    "description": "围绕肿瘤身份、状态轨迹、通讯、调控及联合研究选择方法。",
+    "axes": []
+  },
+  {
+    "key": "bio/single-cell/practice",
+    "name": "03 实操与排错",
+    "parentKey": "bio/single-cell",
+    "description": "完整运行示例、图表速查、版本管理、结果交付和常见错误。",
+    "axes": []
+  },
+  {
+    "key": "bio/spatial",
+    "name": "空间转录组",
+    "parentKey": "bio",
+    "description": "组织位置、表达、图像与空间邻域的设计和分析。",
+    "axes": []
   },
   {
     "key": "bio/epigenetics",

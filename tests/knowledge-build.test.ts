@@ -13,7 +13,7 @@ function fixture(){
  const dir=fs.mkdtempSync(path.join(os.tmpdir(),'topic-docs-')),source=path.join(dir,'source'),out=path.join(dir,'out'),key=randomBytes(32);
  const write=(file:string,value:string|Buffer)=>{const target=path.join(source,file);fs.mkdirSync(path.dirname(target),{recursive:true});fs.writeFileSync(target,value);};
  const json=(file:string,value:unknown)=>write(file,JSON.stringify(value));
- json('taxonomy.json',{version:2,categories:[{key:'bio',name:'生物信息学',parentKey:null,axes:[],description:''},{key:'bio/sequencing',name:'测序',parentKey:'bio',axes:[],description:''},{key:'cells',name:'细胞实验',parentKey:null,axes:[],description:''}]});
+ json('taxonomy.json',{version:2,categories:[{key:'bio',name:'生物信息学',parentKey:null,axes:[],description:'',startDocumentId:1},{key:'bio/sequencing',name:'测序',parentKey:'bio',axes:[],description:''},{key:'cells',name:'细胞实验',parentKey:null,axes:[],description:''}]});
  json('catalog.json',{schema:2,policy:{id:90000,file:'governance/usage-and-confidentiality.md'},documents:[{id:1,title:'测序方法',category_key:'bio/sequencing',file:'content/bio/sequencing/method.md',order:0,aliases:['NGS'],source_ids:[1,2],kind:'guide'},{id:51,title:'细胞培养',category_key:'cells',file:'content/cells/culture.md',order:1,aliases:[],kind:'guide'}]});
  json('redirects.json',{documents:{2:1,3:null},categories:{'wet/sequencing':'bio/sequencing',wet:''},anchors:{'2#old-section':{id:1,hash:'method-1-章节'}}});
  write('content/bio/sequencing/method.md','# 测序方法\n\n完整方法摘要。\n\n## 章节\n\n[![流程](/assets/pixel.svg)](?view=documents&doc=2#old-section)\n\n```bash\necho "keep code unchanged"\n```\n\n[细胞培养](?view=documents&doc=51)\n');
@@ -34,6 +34,7 @@ test('topic build emits only canonical pages, preserves code/media/anchors and k
   const result=await f.build();assert.equal(result.documents,2);assert.equal(result.policy,1);assert.equal(result.media,1);
   const catalog=JSON.parse(f.read('/knowledge/catalog.json').toString()) as MethodCatalog;
   assert.deepEqual(catalog.documents.map(d=>d.id),[1,51,90000]);assert.equal(catalog.categories.find(c=>c.key==='bio/sequencing')!.parentKey,'bio');
+  assert.equal(catalog.categories.find(c=>c.key==='bio')!.startDocumentId,1);
   assert.ok(catalog.documents.every(d=>d.content===''));assert.equal(catalog.documents[0].summary,'完整方法摘要。');
   assert.ok(catalog.documents.every(d=>!Object.hasOwn(d,'book_key')&&!Object.hasOwn(d,'source_ids')));
   assert.equal(fs.existsSync(path.join(f.out,'catalog.json')),false);
@@ -80,6 +81,8 @@ test('Git-tracked reference notes and attachments never enter published knowledg
 
 test('broken topics, references, teaching content and shadowing redirects fail before replacing output',async()=>{
  const cases=[
+  (f:ReturnType<typeof fixture>)=>{const t=JSON.parse(fs.readFileSync(path.join(f.source,'taxonomy.json'),'utf8'));t.categories[0].startDocumentId=999;f.json('taxonomy.json',t);},
+  (f:ReturnType<typeof fixture>)=>{const t=JSON.parse(fs.readFileSync(path.join(f.source,'taxonomy.json'),'utf8'));t.categories[0].startDocumentId=51;f.json('taxonomy.json',t);},
   (f:ReturnType<typeof fixture>)=>f.json('redirects.json',{documents:{1:51},categories:{},anchors:{}}),
   (f:ReturnType<typeof fixture>)=>f.write('content/cells/culture.md','# 细胞培养\n\n[missing](?view=documents&doc=999)\n'),
   (f:ReturnType<typeof fixture>)=>f.write('content/cells/culture.md','# 细胞培养\n\n[missing heading](?view=documents&doc=1#missing)\n'),

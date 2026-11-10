@@ -4,7 +4,7 @@ import remarkGfm from 'remark-gfm';
 
 export type FacetValue={key:string;label:string;aliases?:string[]};
 export type CatalogAxis={key:string;label:string;description:string;values:FacetValue[]};
-export type CatalogCategory={key:string;name:string;parentKey:string|null;description:string;axes:CatalogAxis[]};
+export type CatalogCategory={key:string;name:string;parentKey:string|null;description:string;axes:CatalogAxis[];startDocumentId?:number};
 export type MethodDocument={id:number;title:string;category:string;content:string;author_id:string;author_name:string;updated_at:string;category_key?:string;category_path?:string;summary?:string;aliases?:string[];tags?:string[];facets?:Record<string,string[]>;archived?:boolean;can_edit?:boolean;revision?:number;collection?:string;kind?:string;redirect_to?:number;order?:number;body_url?:string;source_path?:string;search_text?:string};
 export type MethodCatalog={categories:CatalogCategory[];documents:MethodDocument[];version?:string;policyId?:number;documentCount?:number;redirects?:{documents:Record<string,number|null>;categories:Record<string,string>;anchors:Record<string,{id:number;hash:string}>}};
 export function resolveDocumentRoute(catalog:MethodCatalog,id:number|null,category:string,hash=''){
